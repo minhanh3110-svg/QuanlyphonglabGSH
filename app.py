@@ -19,17 +19,18 @@ import os
 # Hỗ trợ các định dạng: PNG, JPG, JPEG
 LOGO_PATH = "logo.png"  # Thay đổi tên file này nếu cần
 
-# Cấu hình trang
+# Cấu hình trang - TỐI ƯU CHO MOBILE
 st.set_page_config(
     page_title="Quản lý Phòng Nuôi Cấy Mô",
     page_icon="🌱",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # Thu gọn sidebar mặc định để dễ dùng trên mobile
 )
 
-# CSS tùy chỉnh
+# CSS tùy chỉnh - TỐI ƯU CHO MOBILE
 st.markdown("""
     <style>
+    /* ========== HEADER ========== */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
@@ -40,17 +41,57 @@ st.markdown("""
         border-radius: 10px;
         margin-bottom: 2rem;
     }
+    
+    /* ========== BUTTONS - TỐI ƯU MOBILE ========== */
     .stButton>button {
         background-color: #56ab2f;
         color: white;
         font-weight: bold;
-        border-radius: 5px;
-        padding: 0.5rem 2rem;
+        border-radius: 8px;
+        padding: 0.75rem 2rem;
+        font-size: 1rem;
+        width: 100%;
+        min-height: 48px; /* Kích thước tối thiểu cho mobile */
+        touch-action: manipulation; /* Tắt double-tap zoom */
     }
     .stButton>button:hover {
         background-color: #2d5016;
     }
-    /* Cảnh báo đỏ rực */
+    
+    /* ========== FORM INPUTS - TỐI ƯU MOBILE ========== */
+    /* Input fields lớn hơn, dễ chạm */
+    .stTextInput input, 
+    .stNumberInput input,
+    .stSelectbox select,
+    .stTextArea textarea {
+        font-size: 16px !important; /* Tránh auto-zoom trên iOS */
+        padding: 0.75rem !important;
+        min-height: 48px !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Date/Time input */
+    .stDateInput input,
+    .stTimeInput input {
+        font-size: 16px !important;
+        padding: 0.75rem !important;
+        min-height: 48px !important;
+    }
+    
+    /* Selectbox dropdown */
+    div[data-baseweb="select"] > div {
+        font-size: 16px !important;
+        min-height: 48px !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* Number input buttons */
+    button[data-baseweb="button-arrow"] {
+        width: 40px !important;
+        height: 40px !important;
+    }
+    
+    /* ========== CẢNH BÁO ĐỎ RỰC ========== */
     div[data-testid="stAlert"][data-baseweb="notification"]:has(> div > div:first-child:contains("CẢNH BÁO ĐỎ RỰC")) {
         background-color: #dc3545 !important;
         border: 3px solid #a71d2a !important;
@@ -64,6 +105,144 @@ st.markdown("""
     div[data-testid="stAlert"][data-baseweb="notification"]:has(> div > div:first-child:contains("Chú ý")) {
         background-color: #ffc107 !important;
         border: 2px solid #ff9800 !important;
+    }
+    
+    /* ========== RESPONSIVE TABLE ========== */
+    /* Bảng cuộn ngang trên mobile */
+    .stDataFrame {
+        overflow-x: auto !important;
+    }
+    
+    /* ========== MOBILE RESPONSIVE ========== */
+    @media (max-width: 768px) {
+        /* Header nhỏ hơn trên mobile */
+        .main-header {
+            font-size: 1.5rem;
+            padding: 0.75rem 0;
+            margin-bottom: 1rem;
+        }
+        
+        /* Sidebar thu gọn mặc định */
+        section[data-testid="stSidebar"] {
+            width: 0px;
+        }
+        
+        /* Button full width, dễ bấm */
+        .stButton>button {
+            padding: 1rem;
+            font-size: 1.1rem;
+            min-height: 56px;
+        }
+        
+        /* Form submit button nổi bật */
+        .stFormSubmitButton>button {
+            background-color: #56ab2f !important;
+            font-size: 1.2rem !important;
+            padding: 1.2rem !important;
+            min-height: 60px !important;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+            font-weight: bold !important;
+        }
+        
+        /* Input fields lớn hơn trên mobile */
+        .stTextInput input, 
+        .stNumberInput input,
+        .stSelectbox select,
+        .stTextArea textarea,
+        .stDateInput input,
+        .stTimeInput input {
+            font-size: 18px !important;
+            padding: 1rem !important;
+            min-height: 56px !important;
+        }
+        
+        /* Dropdown lớn hơn */
+        div[data-baseweb="select"] > div {
+            font-size: 18px !important;
+            min-height: 56px !important;
+        }
+        
+        /* Label lớn hơn, dễ đọc */
+        label {
+            font-size: 1.1rem !important;
+            font-weight: 600 !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Expander dễ bấm hơn */
+        .streamlit-expanderHeader {
+            font-size: 1.1rem !important;
+            padding: 1rem !important;
+            min-height: 56px !important;
+        }
+        
+        /* Tab dễ chọn hơn */
+        button[data-baseweb="tab"] {
+            font-size: 1rem !important;
+            padding: 1rem !important;
+            min-height: 52px !important;
+        }
+        
+        /* Metric cards stack vertically */
+        div[data-testid="stMetricValue"] {
+            font-size: 1.5rem !important;
+        }
+        
+        /* Chart full width */
+        .js-plotly-plot {
+            width: 100% !important;
+        }
+        
+        /* Download button lớn hơn */
+        .stDownloadButton>button {
+            padding: 1rem !important;
+            font-size: 1.1rem !important;
+            min-height: 56px !important;
+        }
+        
+        /* Spacing tốt hơn giữa các elements */
+        .element-container {
+            margin-bottom: 1rem !important;
+        }
+        
+        /* Success/Error message dễ đọc hơn */
+        .stAlert {
+            font-size: 1rem !important;
+            padding: 1rem !important;
+        }
+    }
+    
+    /* ========== TABLET (768px - 1024px) ========== */
+    @media (min-width: 768px) and (max-width: 1024px) {
+        .main-header {
+            font-size: 2rem;
+        }
+        
+        .stButton>button {
+            min-height: 52px;
+            font-size: 1.05rem;
+        }
+        
+        .stTextInput input,
+        .stNumberInput input {
+            font-size: 17px !important;
+            min-height: 52px !important;
+        }
+    }
+    
+    /* ========== PREVENT ZOOM ON IOS ========== */
+    @supports (-webkit-touch-callout: none) {
+        input, select, textarea {
+            font-size: 16px !important; /* iOS không zoom nếu >= 16px */
+        }
+    }
+    
+    /* ========== TOUCH TARGETS ========== */
+    /* Đảm bảo mọi element có thể click có kích thước tối thiểu 44x44px (Apple HIG) */
+    button, a, input[type="checkbox"], input[type="radio"] {
+        min-width: 44px;
+        min-height: 44px;
+        touch-action: manipulation;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -881,46 +1060,134 @@ else:
             st.warning("⚠️ Vui lòng cập nhật danh mục ở trang 'Quản lý danh mục' trước khi nhập liệu.")
         else:
             with st.form("form_nhap_lieu", clear_on_submit=True):
-                col1, col2 = st.columns(2)
+                # TỐI ƯU MOBILE: Chỉ dùng 1 cột trên mobile, 2 cột trên desktop
+                # Streamlit tự động responsive với st.columns()
                 
-                with col1:
-                    st.markdown("#### 📅 Thông tin thời gian")
-                    ngay_cay = st.date_input(
-                        "Ngày cấy *",
-                        value=date.today()
-                    )
-                    
-                    # Tự động tính tháng và tuần
-                    thang = ngay_cay.month
-                    tuan = tinh_tuan(ngay_cay)
-                    
-                    st.info(f"📆 Tháng: {thang} | Tuần: {tuan}")
-                    
-                    st.markdown("#### 🌿 Thông tin giống")
-                    ten_giong = st.selectbox(
-                        "Tên giống *",
-                        options=danh_sach_ten_giong,
-                        index=0
-                    )
-                    
-                    chu_ky = st.selectbox(
-                        "Chu kỳ *",
-                        options=danh_sach_chu_ky,
-                        index=0
-                    )
-                    
-                    tinh_trang = st.selectbox(
-                        "Tình trạng *",
-                        options=danh_sach_tinh_trang,
-                        index=0
-                    )
-                    
-                    box_cay = st.number_input(
-                        "Box cấy *",
-                        min_value=1,
-                        value=1,
-                        step=1
-                    )
+                st.markdown("#### 📅 Thông tin thời gian")
+                ngay_cay = st.date_input(
+                    "Ngày cấy *",
+                    value=date.today()
+                )
+                
+                # Tự động tính tháng và tuần
+                thang = ngay_cay.month
+                tuan = tinh_tuan(ngay_cay)
+                
+                st.info(f"📆 Tháng: {thang} | Tuần: {tuan}")
+                
+                st.markdown("---")
+                st.markdown("#### 🌿 Thông tin giống")
+                ten_giong = st.selectbox(
+                    "Tên giống *",
+                    options=danh_sach_ten_giong,
+                    index=0,
+                    help="Chọn loại giống cây"
+                )
+                
+                chu_ky = st.selectbox(
+                    "Chu kỳ *",
+                    options=danh_sach_chu_ky,
+                    index=0,
+                    help="Chọn chu kỳ cấy"
+                )
+                
+                tinh_trang = st.selectbox(
+                    "Tình trạng *",
+                    options=danh_sach_tinh_trang,
+                    index=0,
+                    help="Chọn tình trạng cây"
+                )
+                
+                box_cay = st.number_input(
+                    "Box cấy *",
+                    min_value=1,
+                    value=1,
+                    step=1,
+                    help="Số lượng box cấy"
+                )
+                
+                st.markdown("---")
+                st.markdown("#### 🧪 Thông tin môi trường")
+                
+                # Môi trường mẹ
+                moi_truong_me = st.selectbox(
+                    "Môi trường mẹ *",
+                    options=list(dict_moi_truong.values()),
+                    index=0,
+                    help="Chọn môi trường mẹ"
+                )
+                ma_so_moi_truong_me = next((k for k, v in dict_moi_truong.items() if v == moi_truong_me), None)
+                
+                # Môi trường con
+                moi_truong_con = st.selectbox(
+                    "Môi trường con *",
+                    options=list(dict_moi_truong.values()),
+                    index=0,
+                    help="Chọn môi trường con"
+                )
+                ma_so_moi_truong_con = next((k for k, v in dict_moi_truong.items() if v == moi_truong_con), None)
+                
+                st.markdown("---")
+                st.markdown("#### 👨‍🌾 Thông tin túi mẹ")
+                
+                so_tui_me = st.number_input(
+                    "Số túi mẹ *",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Số lượng túi mẹ"
+                )
+                
+                so_cum_tui_me = st.number_input(
+                    "Số cụm/túi mẹ *",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Số cụm trên mỗi túi mẹ"
+                )
+                
+                st.markdown("---")
+                st.markdown("#### 🌱 Thông tin túi con")
+                
+                so_tui_con = st.number_input(
+                    "Số túi con *",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Số lượng túi con"
+                )
+                
+                so_cum_tui_con = st.number_input(
+                    "Số cụm/túi con *",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Số cụm trên mỗi túi con"
+                )
+                
+                st.markdown("---")
+                st.markdown("#### ⏰ Thời gian làm việc")
+                
+                gio_bat_dau = st.time_input(
+                    "Giờ bắt đầu *",
+                    value=datetime.now().time(),
+                    help="Thời gian bắt đầu làm việc"
+                )
+                
+                gio_ket_thuc = st.time_input(
+                    "Giờ kết thúc *",
+                    value=datetime.now().time(),
+                    help="Thời gian kết thúc làm việc"
+                )
+                
+                st.markdown("---")
+                st.markdown("#### 📝 Ghi chú")
+                ghi_chu = st.text_area(
+                    "Ghi chú",
+                    placeholder="Nhập ghi chú nếu có...",
+                    height=100,
+                    help="Thông tin bổ sung"
+                )
                     
                     so_gian_ke = st.text_input(
                         "Số Giàn/Kệ *",
