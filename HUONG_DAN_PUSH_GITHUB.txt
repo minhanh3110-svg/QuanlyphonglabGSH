@@ -1,0 +1,85 @@
+═══════════════════════════════════════════════════════════
+   📋 HƯỚNG DẪN PUSH CODE LÊN GITHUB
+═══════════════════════════════════════════════════════════
+
+✅ CÁC COMMIT ĐÃ CHUẨN BỊ XONG:
+   136ae30 - Fix: Add tab4 definition for Rack/Shelf management
+   2433181 - Feature: Add Rack/Shelf management in Category Management
+   0069844 - Fix: Remove duplicate time input section
+
+───────────────────────────────────────────────────────────
+
+📝 BƯỚC 1: TẠO REPOSITORY MỚI TRÊN GITHUB
+   
+   1. Vào: https://github.com/new
+   
+   2. Điền thông tin:
+      • Repository name: QuanLyPhongLabGSH
+      • Description: Hệ thống quản lý phòng Lab nuôi cấy mô
+      • Public hoặc Private (tùy bạn)
+      • ⚠️ KHÔNG tick "Add a README file"
+      • ⚠️ KHÔNG chọn .gitignore
+      • ⚠️ KHÔNG chọn license
+   
+   3. Click "Create repository"
+
+───────────────────────────────────────────────────────────
+
+🔧 BƯỚC 2: THÊM REMOTE VÀ PUSH
+
+   Mở PowerShell tại thư mục D:\QUANLYLAB và chạy:
+
+   git remote add origin https://github.com/USERNAME/QuanLyPhongLabGSH.git
+   git push -u origin master
+
+   ⚠️ Thay "USERNAME" bằng tên GitHub của bạn!
+
+   Ví dụ:
+   git remote add origin https://github.com/lehasan123/QuanLyPhongLabGSH.git
+   git push -u origin master
+
+───────────────────────────────────────────────────────────
+
+🌐 BƯỚC 3: TRIỂN KHAI LÊN STREAMLIT CLOUD
+
+   1. Vào: https://share.streamlit.io
+   
+   2. Click "New app"
+   
+   3. Chọn:
+      • Repository: USERNAME/QuanLyPhongLabGSH
+      • Branch: master
+      • Main file path: app.py
+   
+   4. Click "Deploy"
+   
+   5. Đợi 2-5 phút
+
+───────────────────────────────────────────────────────────
+
+🔄 CẬP NHẬT SAU NÀY:
+
+   Khi có thay đổi code:
+   
+   git add .
+   git commit -m "Your message"
+   git push origin master
+
+   Sau đó vào Streamlit Cloud → Reboot app
+
+───────────────────────────────────────────────────────────
+
+❓ XỬ LÝ LỖI THƯỜNG GẶP:
+
+   Lỗi: fatal: 'origin' does not appear to be a git repository
+   → Chưa add remote, chạy: git remote add origin ...
+
+   Lỗi: ! [rejected] master -> master (fetch first)
+   → Chạy: git pull origin master --rebase
+   →      git push origin master
+
+   Lỗi: Permission denied (publickey)
+   → Cần cấu hình SSH key hoặc dùng HTTPS với token
+
+═══════════════════════════════════════════════════════════
+

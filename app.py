@@ -2584,7 +2584,7 @@ else:
         st.header("⚙️ Quản lý danh mục")
         st.markdown("---")
         
-        tab1, tab2, tab3 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🧪 Môi trường"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🧪 Môi trường", "📦 Giàn/Kệ"])
         
         # Tab Tên giống
         with tab1:
