@@ -427,6 +427,16 @@ def init_database():
         )
     ''')
     
+    # Bảng danh mục Giàn/Kệ (Phòng sáng)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS danh_muc_gian_ke (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            so_gian_ke TEXT NOT NULL UNIQUE,
+            ghi_chu TEXT,
+            ngay_tao TEXT
+        )
+    ''')
+    
     # Bảng danh mục môi trường (có mã số)
     c.execute('''
         CREATE TABLE IF NOT EXISTS danh_muc_moi_truong (
@@ -608,6 +618,15 @@ def get_danh_sach_chu_ky():
     df = pd.read_sql_query('SELECT chu_ky FROM danh_muc_chu_ky ORDER BY chu_ky', conn)
     conn.close()
     return df['chu_ky'].tolist()
+
+def get_danh_sach_gian_ke():
+    """Lấy danh sách giàn/kệ từ database"""
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    c.execute('SELECT so_gian_ke FROM danh_muc_gian_ke ORDER BY so_gian_ke')
+    result = [row[0] for row in c.fetchall()]
+    conn.close()
+    return result
 
 def get_danh_sach_moi_truong():
     """Lấy danh sách môi trường từ database (trả về dict: mã số -> tên)"""
@@ -1211,12 +1230,23 @@ else:
                     help="Thông tin bổ sung"
                 )
                 
-                so_gian_ke = st.text_input(
-                    "Số Giàn/Kệ *",
-                    placeholder="Ví dụ: Giàn A1, Kệ B2, Giàn 1...",
-                    value=f"Giàn {box_cay}",
-                    help="Nhập số giàn/kệ để quản lý vị trí cây trong phòng sáng"
-                )
+                # Lấy danh sách giàn/kệ từ database
+                danh_sach_gian_ke = get_danh_sach_gian_ke()
+                
+                if len(danh_sach_gian_ke) > 0:
+                    so_gian_ke = st.selectbox(
+                        "Số Giàn/Kệ *",
+                        options=danh_sach_gian_ke,
+                        help="Chọn giàn/kệ từ danh sách (Quản lý tại 'Quản lý danh mục')"
+                    )
+                else:
+                    st.warning("⚠️ Chưa có giàn/kệ nào. Vui lòng thêm tại 'Quản lý danh mục' → 'Giàn/Kệ Phòng Sáng'")
+                    so_gian_ke = st.text_input(
+                        "Số Giàn/Kệ (tạm thời) *",
+                        placeholder="Ví dụ: Giàn A1, Kệ B2...",
+                        value=f"Giàn {box_cay}",
+                        help="Nhập tạm - Nên thêm vào danh mục để dễ quản lý"
+                    )
                 
                 st.markdown("---")
                 st.markdown("#### 🧪 Thông tin môi trường")
@@ -2905,6 +2935,102 @@ else:
                                 st.warning("⚠️ Vui lòng chọn ít nhất một môi trường để xóa!")
                 else:
                     st.info("ℹ️ Không có môi trường nào để xóa.")
+        
+        # TAB 4: QUẢN LÝ GIÀN/KỆ PHÒNG SÁNG
+        with tab4:
+            st.subheader("📦 Quản lý Giàn/Kệ Phòng Sáng")
+            
+            danh_sach_gian_ke = get_danh_sach_gian_ke()
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("#### 📋 Danh sách hiện tại")
+                if len(danh_sach_gian_ke) > 0:
+                    # Hiển thị dạng bảng với thông tin chi tiết
+                    conn = sqlite3.connect('data.db')
+                    df_gk = pd.read_sql_query('''
+                        SELECT so_gian_ke AS "Số Giàn/Kệ", 
+                               ghi_chu AS "Ghi chú",
+                               ngay_tao AS "Ngày tạo"
+                        FROM danh_muc_gian_ke 
+                        ORDER BY so_gian_ke
+                    ''', conn)
+                    conn.close()
+                    st.dataframe(df_gk, use_container_width=True, hide_index=True)
+                else:
+                    st.warning("⚠️ Chưa có giàn/kệ nào.")
+            
+            with col2:
+                st.markdown("#### ➕ Thêm mới")
+                with st.form("form_them_gian_ke", clear_on_submit=True):
+                    so_gian_ke_moi = st.text_input(
+                        "Số Giàn/Kệ *", 
+                        placeholder="VD: Giàn A1, Kệ B2",
+                        key="them_gk"
+                    )
+                    ghi_chu_gk = st.text_input(
+                        "Ghi chú",
+                        placeholder="VD: Phòng sáng tầng 1",
+                        key="ghi_chu_gk"
+                    )
+                    submitted = st.form_submit_button("➕ Thêm", use_container_width=True)
+                    
+                    if submitted and so_gian_ke_moi.strip():
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        try:
+                            c.execute('''
+                                INSERT INTO danh_muc_gian_ke (so_gian_ke, ghi_chu, ngay_tao)
+                                VALUES (?, ?, ?)
+                            ''', (so_gian_ke_moi.strip(), ghi_chu_gk.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                            conn.commit()
+                            st.success(f"✅ Đã thêm: {so_gian_ke_moi}")
+                            st.rerun()
+                        except sqlite3.IntegrityError:
+                            st.error(f"❌ Giàn/Kệ '{so_gian_ke_moi}' đã tồn tại!")
+                        finally:
+                            conn.close()
+            
+            st.markdown("---")
+            st.markdown("#### 🗑️ Xóa")
+            if len(danh_sach_gian_ke) > 0:
+                with st.form("form_xoa_gian_ke", clear_on_submit=True):
+                    gk_xoa = st.selectbox(
+                        "Chọn giàn/kệ cần xóa", 
+                        options=danh_sach_gian_ke, 
+                        key="xoa_gk"
+                    )
+                    submitted = st.form_submit_button("🗑️ Xóa", use_container_width=True)
+                    
+                    if submitted:
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        c.execute('DELETE FROM danh_muc_gian_ke WHERE so_gian_ke = ?', (gk_xoa,))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"✅ Đã xóa: {gk_xoa}")
+                        st.rerun()
+            else:
+                st.info("Không có giàn/kệ để xóa")
+            
+            # Hướng dẫn sử dụng
+            with st.expander("💡 Hướng dẫn sử dụng"):
+                st.markdown("""
+                **Giàn/Kệ Phòng Sáng** là vị trí lưu trữ các túi cây trong phòng nuôi.
+                
+                **Ví dụ đặt tên:**
+                - `Giàn A1`, `Giàn A2`, `Giàn A3`...
+                - `Kệ B1`, `Kệ B2`, `Kệ B3`...
+                - `Phòng 1 - Giàn 01`
+                - `Tầng 2 - Kệ Trái`
+                
+                **Lợi ích:**
+                - ✅ Dễ dàng chọn từ danh sách thay vì nhập tay
+                - ✅ Tránh lỗi chính tả
+                - ✅ Thống kê chính xác số túi trên mỗi giàn
+                - ✅ Quản lý kiểm kê hiệu quả
+                """)
     
     # ========== TRANG QUẢN LÝ TÀI KHOẢN (CHỈ ADMIN) ==========
     elif menu == "Quản lý tài khoản" and is_admin:
