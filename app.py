@@ -1752,24 +1752,26 @@ else:
             ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý & Phân tích Nhiễm", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Mô Soi", "Đối soát Mô Soi", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
         )
     else:
-        # NHÂN VIÊN: Chỉ xem nhật ký cá nhân + báo cáo năng suất/nhiễm
+        # NHÂN VIÊN: Nhập liệu + Xem báo cáo cá nhân
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Báo cáo Cá nhân"]
+            ["Nhập liệu", "Báo cáo Cá nhân"]
         )
         
         st.sidebar.markdown("---")
         st.sidebar.info("""
         **👤 Quyền Nhân viên:**
         
-        Bạn chỉ có quyền xem:
-        - ✅ Nhật ký cá nhân
-        - ✅ Báo cáo năng suất cá nhân
-        - ✅ Tỷ lệ nhiễm cá nhân
+        Bạn có thể:
+        - ✅ Nhập nhật ký cấy
+        - ✅ Sửa nhật ký **TRONG NGÀY**
+        - ✅ Xem báo cáo cá nhân
         
-        ⚠️ Không có quyền nhập liệu hoặc quản lý.
+        ⚠️ **Lưu ý:**
+        - Chỉ sửa được nhật ký **HÔM NAY**
+        - Nhật ký ngày cũ → Liên hệ Admin
         
-        💡 Liên hệ Admin nếu cần thay đổi dữ liệu.
+        💡 Không có quyền quản lý hệ thống.
         """)
     
     # ========== DASHBOARD VIỆC CẦN LÀM GẤP (ADMIN) ==========
@@ -2159,8 +2161,8 @@ else:
             else:
                 st.info("ℹ️ Không có dữ liệu trong khoảng thời gian này.")
     
-    # ========== TRANG NHẬP LIỆU (CHỈ ADMIN) ==========
-    elif menu == "Nhập liệu" and is_admin:
+    # ========== TRANG NHẬP LIỆU (ADMIN + NHÂN VIÊN) ==========
+    elif menu == "Nhập liệu":
         st.header("📝 Nhập liệu mới")
         st.markdown("---")
         
@@ -2838,9 +2840,26 @@ else:
                         """)
                     
                     with col_action:
-                        if st.button("✏️ Sửa", key=f"edit_{row['id']}", use_container_width=True):
-                            st.session_state[f'editing_{row["id"]}'] = True
-                            st.rerun()
+                        # Kiểm tra quyền sửa
+                        ngay_cay_record = pd.to_datetime(row['ngay_cay']).date()
+                        ngay_hom_nay = date.today()
+                        
+                        # Admin: Sửa được mọi lúc
+                        # Nhân viên: Chỉ sửa được nhật ký HÔM NAY
+                        co_the_sua = is_admin or (ngay_cay_record == ngay_hom_nay)
+                        
+                        if co_the_sua:
+                            if st.button("✏️ Sửa", key=f"edit_{row['id']}", use_container_width=True):
+                                st.session_state[f'editing_{row["id"]}'] = True
+                                st.rerun()
+                        else:
+                            st.warning("""
+                            🔒 **Không thể sửa**
+                            
+                            Nhật ký ngày cũ
+                            
+                            → Liên hệ Admin
+                            """)
                     
                     # Form chỉnh sửa (chỉ hiển thị khi click "Sửa")
                     if st.session_state.get(f'editing_{row["id"]}', False):
