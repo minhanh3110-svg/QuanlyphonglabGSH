@@ -4535,6 +4535,165 @@ else:
                             """)
                             st.balloons()
                             st.rerun()
+            
+            # ===== HIỂN THỊ DANH SÁCH MÔ SOI ĐÃ NHẬP =====
+            st.markdown("---")
+            st.markdown("---")
+            st.header("📋 Danh sách Mô Soi đã nhập")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # Query danh sách mô soi gần đây (20 bản ghi)
+            df_mo_soi = pd.read_sql_query('''
+                SELECT 
+                    id, ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi,
+                    so_luong_ban_dau, so_tui_nhiem, so_tui_sach, so_cum_moi_tui,
+                    tong_cum_sach, so_cum_da_cap, so_cum_con_lai, trang_thai,
+                    nguoi_soi, ma_nhan_vien, ghi_chu
+                FROM mo_soi
+                ORDER BY ngay_tao DESC
+                LIMIT 20
+            ''', conn)
+            conn.close()
+            
+            if len(df_mo_soi) > 0:
+                st.info(f"📊 Hiển thị {len(df_mo_soi)} lô mô soi gần nhất")
+                
+                for idx, row in df_mo_soi.iterrows():
+                    # Tính tỷ lệ
+                    ty_le_sach = (row['so_tui_sach'] / row['so_luong_ban_dau'] * 100) if row['so_luong_ban_dau'] > 0 else 0
+                    ty_le_da_cap = (row['so_cum_da_cap'] / row['tong_cum_sach'] * 100) if row['tong_cum_sach'] > 0 else 0
+                    
+                    # Icon trạng thái
+                    if row['trang_thai'] == 'Đã kết thúc chu kỳ':
+                        icon_status = "✅"
+                        color_status = "green"
+                    elif ty_le_da_cap > 80:
+                        icon_status = "⚠️"
+                        color_status = "orange"
+                    else:
+                        icon_status = "🔄"
+                        color_status = "blue"
+                    
+                    with st.expander(f"{icon_status} **{row['ma_lo_mo_soi']}** - {row['ten_giong']} ({row['chu_ky_truoc']}) - Ngày: {row['ngay_soi']}"):
+                        col_info, col_action = st.columns([3, 1])
+                        
+                        with col_info:
+                            st.markdown(f"""
+                            **📦 Thông tin Mô Soi:**
+                            - 🔖 **Mã lô:** {row['ma_lo_mo_soi']}
+                            - 🌱 **Giống:** {row['ten_giong']} | **Chu kỳ trước:** {row['chu_ky_truoc']}
+                            - 📅 **Ngày soi:** {row['ngay_soi']}
+                            - 📊 **Ban đầu:** {row['so_luong_ban_dau']} túi | **Nhiễm:** {row['so_tui_nhiem']} túi | **Sạch:** {row['so_tui_sach']} túi
+                            - 🎯 **Tỷ lệ sạch:** {ty_le_sach:.1f}%
+                            
+                            **🔢 Tình trạng sử dụng:**
+                            - ✅ **Tổng cụm sạch:** {row['tong_cum_sach']} cụm
+                            - 📤 **Đã cấp:** {row['so_cum_da_cap']} cụm ({ty_le_da_cap:.1f}%)
+                            - 📦 **Còn lại:** {row['so_cum_con_lai']} cụm
+                            - 🏷️ **Trạng thái:** {row['trang_thai']}
+                            
+                            **👤 Người thực hiện:**
+                            - **Tên:** {row['nguoi_soi']} | **Mã:** {row['ma_nhan_vien']}
+                            - 📝 **Ghi chú:** {row['ghi_chu'] if row['ghi_chu'] else '_Không có_'}
+                            """)
+                        
+                        with col_action:
+                            # Chỉ Admin mới sửa được
+                            if is_admin:
+                                if st.button("✏️ Sửa", key=f"edit_mosoi_{row['id']}", use_container_width=True):
+                                    st.session_state[f'editing_mosoi_{row["id"]}'] = True
+                                    st.rerun()
+                            else:
+                                st.info("🔒 Chỉ Admin")
+                        
+                        # Form chỉnh sửa (chỉ hiển thị khi click "Sửa")
+                        if st.session_state.get(f'editing_mosoi_{row["id"]}', False):
+                            st.markdown("---")
+                            st.markdown("### ✏️ Chỉnh sửa Mô Soi")
+                            
+                            with st.form(f"form_edit_mosoi_{row['id']}"):
+                                st.markdown("#### 🔢 Cập nhật kết quả kiểm tra")
+                                
+                                col1, col2, col3 = st.columns(3)
+                                with col1:
+                                    edit_so_luong_ban_dau = st.number_input(
+                                        "Tổng số túi ban đầu",
+                                        min_value=1,
+                                        value=int(row['so_luong_ban_dau']),
+                                        key=f"edit_ban_dau_{row['id']}"
+                                    )
+                                with col2:
+                                    edit_so_tui_nhiem = st.number_input(
+                                        "Số túi nhiễm",
+                                        min_value=0,
+                                        value=int(row['so_tui_nhiem']),
+                                        key=f"edit_nhiem_{row['id']}"
+                                    )
+                                with col3:
+                                    edit_so_cum_moi_tui = st.number_input(
+                                        "Số cụm/túi sạch",
+                                        min_value=1,
+                                        value=int(row['so_cum_moi_tui']),
+                                        key=f"edit_cum_{row['id']}"
+                                    )
+                                
+                                # Tính toán lại
+                                edit_so_tui_sach = edit_so_luong_ban_dau - edit_so_tui_nhiem
+                                edit_tong_cum_sach = edit_so_tui_sach * edit_so_cum_moi_tui
+                                
+                                st.info(f"📊 **Kết quả:** {edit_so_tui_sach} túi sạch × {edit_so_cum_moi_tui} cụm = **{edit_tong_cum_sach} cụm sạch**")
+                                
+                                edit_ghi_chu = st.text_area(
+                                    "Ghi chú",
+                                    value=row['ghi_chu'] if row['ghi_chu'] else "",
+                                    key=f"edit_ghi_chu_mosoi_{row['id']}",
+                                    height=80
+                                )
+                                
+                                col_submit, col_cancel = st.columns(2)
+                                
+                                with col_submit:
+                                    submitted_edit = st.form_submit_button("💾 Lưu thay đổi", use_container_width=True, type="primary")
+                                
+                                with col_cancel:
+                                    cancelled = st.form_submit_button("❌ Hủy", use_container_width=True)
+                                
+                                if submitted_edit:
+                                    if edit_so_tui_sach <= 0:
+                                        st.error("❌ Số túi sạch phải > 0!")
+                                    else:
+                                        # Tính lại số cụm còn lại (giữ nguyên số đã cấp)
+                                        edit_so_cum_con_lai = edit_tong_cum_sach - row['so_cum_da_cap']
+                                        
+                                        # Cập nhật database
+                                        conn = sqlite3.connect('data.db')
+                                        c = conn.cursor()
+                                        c.execute('''
+                                            UPDATE mo_soi
+                                            SET so_luong_ban_dau = ?, so_tui_nhiem = ?, so_tui_sach = ?,
+                                                so_cum_moi_tui = ?, tong_cum_sach = ?, so_cum_con_lai = ?,
+                                                ghi_chu = ?, ngay_cap_nhat = ?
+                                            WHERE id = ?
+                                        ''', (
+                                            edit_so_luong_ban_dau, edit_so_tui_nhiem, edit_so_tui_sach,
+                                            edit_so_cum_moi_tui, edit_tong_cum_sach, edit_so_cum_con_lai,
+                                            edit_ghi_chu, datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                            row['id']
+                                        ))
+                                        conn.commit()
+                                        conn.close()
+                                        
+                                        # Xóa trạng thái editing
+                                        st.session_state[f'editing_mosoi_{row["id"]}'] = False
+                                        st.success("✅ Đã cập nhật Mô Soi thành công!")
+                                        st.rerun()
+                                
+                                if cancelled:
+                                    st.session_state[f'editing_mosoi_{row["id"]}'] = False
+                                    st.rerun()
+            else:
+                st.info("ℹ️ Chưa có dữ liệu Mô Soi. Vui lòng nhập lô đầu tiên.")
         
         # Tab 2: Danh sách Mô Soi
         with tab2:
