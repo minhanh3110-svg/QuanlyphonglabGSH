@@ -1165,49 +1165,73 @@ else:
                 
                 st.markdown("---")
                 st.markdown("#### ⏰ Thời gian làm việc cho giống này")
-                st.info("💡 Nhập giờ bắt đầu và kết thúc riêng cho từng giống cây")
+                st.caption("(Vui lòng nhập giờ thực tế bắt đầu và kết thúc giống này)")
                 
                 col_time1, col_time2 = st.columns(2)
                 
                 with col_time1:
                     gio_bat_dau_str = st.text_input(
                         "⏰ Giờ bắt đầu (HH:MM) *",
-                        placeholder="Ví dụ: 08:00",
+                        value="",
+                        placeholder="VD: 08:00",
                         help="Nhập giờ bắt đầu theo định dạng HH:MM (24 giờ)",
-                        key="gio_bd"
+                        key="gio_bd_input"
                     )
                 
                 with col_time2:
                     gio_ket_thuc_str = st.text_input(
                         "⏰ Giờ kết thúc (HH:MM) *",
-                        placeholder="Ví dụ: 12:00",
+                        value="",
+                        placeholder="VD: 12:00",
                         help="Nhập giờ kết thúc theo định dạng HH:MM (24 giờ)",
-                        key="gio_kt"
+                        key="gio_kt_input"
                     )
                 
-                # Validate và tính tổng giờ
+                # Biến kiểm tra thời gian hợp lệ
+                thoi_gian_hop_le = False
+                gio_bat_dau = None
+                gio_ket_thuc = None
+                
+                # Validation và tính toán
                 if gio_bat_dau_str and gio_ket_thuc_str:
                     try:
-                        # Kiểm tra định dạng
-                        datetime.strptime(gio_bat_dau_str, "%H:%M")
-                        datetime.strptime(gio_ket_thuc_str, "%H:%M")
+                        # Kiểm tra định dạng HH:MM
+                        gio_bd_obj = datetime.strptime(gio_bat_dau_str.strip(), "%H:%M")
+                        gio_kt_obj = datetime.strptime(gio_ket_thuc_str.strip(), "%H:%M")
                         
-                        # Tính tổng giờ làm
-                        tong_gio_temp = tinh_tong_gio_lam(gio_bat_dau_str, gio_ket_thuc_str)
-                        if tong_gio_temp > 0:
-                            st.success(f"⏱️ Thời gian làm việc: **{tong_gio_temp:.2f} giờ**")
-                        elif tong_gio_temp == 0:
-                            st.warning("⚠️ Giờ bắt đầu và kết thúc giống nhau!")
+                        # Convert sang time object
+                        gio_bat_dau = gio_bd_obj.time()
+                        gio_ket_thuc = gio_kt_obj.time()
+                        
+                        # Kiểm tra giờ kết thúc > giờ bắt đầu
+                        if gio_ket_thuc <= gio_bat_dau:
+                            st.error("⚠️ Giờ kết thúc phải lớn hơn giờ bắt đầu")
+                            thoi_gian_hop_le = False
                         else:
-                            st.error("❌ Giờ kết thúc phải sau giờ bắt đầu!")
+                            # Tính tổng giờ làm chính xác đến phút
+                            tong_gio_temp = tinh_tong_gio_lam(gio_bat_dau_str.strip(), gio_ket_thuc_str.strip())
+                            
+                            if tong_gio_temp > 0:
+                                st.success(f"✅ Thời gian làm việc: **{tong_gio_temp:.2f} giờ** ({int(tong_gio_temp * 60)} phút)")
+                                thoi_gian_hop_le = True
+                            else:
+                                st.error("⚠️ Thời gian làm việc không hợp lệ")
+                                thoi_gian_hop_le = False
+                                
                     except ValueError:
                         st.error("❌ Định dạng giờ không đúng! Vui lòng nhập theo HH:MM (ví dụ: 08:00, 14:30)")
+                        thoi_gian_hop_le = False
+                elif gio_bat_dau_str or gio_ket_thuc_str:
+                    # Chỉ nhập 1 trong 2
+                    st.warning("⚠️ Vui lòng nhập đầy đủ cả giờ bắt đầu và giờ kết thúc")
+                    thoi_gian_hop_le = False
+                else:
+                    # Chưa nhập gì
+                    st.info("💡 Vui lòng nhập thời gian bắt đầu và kết thúc làm việc")
+                    thoi_gian_hop_le = False
                 
-                # Convert sang time object để lưu vào database
-                try:
-                    gio_bat_dau = datetime.strptime(gio_bat_dau_str, "%H:%M").time() if gio_bat_dau_str else datetime.now().time()
-                    gio_ket_thuc = datetime.strptime(gio_ket_thuc_str, "%H:%M").time() if gio_ket_thuc_str else datetime.now().time()
-                except:
+                # Nếu không hợp lệ, set giá trị mặc định để tránh lỗi (sẽ không cho submit)
+                if not thoi_gian_hop_le:
                     gio_bat_dau = datetime.now().time()
                     gio_ket_thuc = datetime.now().time()
                 
@@ -1391,9 +1415,22 @@ else:
                     st.metric("Năng suất", f"{nang_suat:.2f} cây/giờ")
                 
                 st.markdown("---")
-                submitted = st.form_submit_button("💾 Lưu dữ liệu", use_container_width=True)
+                
+                # Nút submit với kiểm tra validation
+                col_submit, col_info = st.columns([3, 1])
+                with col_submit:
+                    submitted = st.form_submit_button("💾 LƯU DỮ LIỆU", use_container_width=True, type="primary")
+                
+                with col_info:
+                    if not thoi_gian_hop_le:
+                        st.warning("⚠️", help="Cần nhập đầy đủ thời gian hợp lệ")
                 
                 if submitted:
+                    # Kiểm tra thời gian hợp lệ trước khi lưu
+                    if not thoi_gian_hop_le:
+                        st.error("❌ Không thể lưu! Vui lòng nhập đầy đủ thông tin thời gian hợp lệ (Giờ bắt đầu và Giờ kết thúc)")
+                        st.stop()
+                    
                     ngay_tao = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
                     conn = sqlite3.connect('data.db')
@@ -2317,12 +2354,20 @@ else:
                     
                     expander_title = f"{canh_bao_icon} | {row['ten_giong']} - {row['so_gian_ke']} | Ngày cấy: {row['ngay_cay'].strftime('%d/%m/%Y') if isinstance(row['ngay_cay'], pd.Timestamp) else row['ngay_cay']} | Tỷ lệ nhiễm: {ty_le_nhiem_lo:.1f}%"
                     
-                    # Kiểm tra xem có phải lô được quét không - FIX: chuyển về boolean
-                    is_scanned = False
-                    if st.session_state.scan_lo_id:
-                        is_scanned = (str(row['id_nhat_ky_cay']) == str(st.session_state.scan_lo_id))
+                    # CRITICAL FIX TRIỆT ĐỂ: Kiểm tra lô được quét - đảm bảo 100% boolean
+                    is_scanned_batch = False
+                    try:
+                        if hasattr(st.session_state, 'scan_lo_id') and st.session_state.scan_lo_id is not None:
+                            is_scanned_batch = (str(row['id_nhat_ky_cay']) == str(st.session_state.scan_lo_id))
+                            # Force boolean
+                            is_scanned_batch = True if is_scanned_batch else False
+                    except Exception:
+                        is_scanned_batch = False
                     
-                    with st.expander(expander_title, expanded=bool(is_scanned)):
+                    # Chắc chắn 100% expanded là boolean (không dùng bool() nữa)
+                    expander_is_expanded = True if is_scanned_batch == True else False
+                    
+                    with st.expander(expander_title, expanded=expander_is_expanded):
                         # Hiển thị cảnh báo nếu tỷ lệ > 10%
                         if ty_le_nhiem_lo > 10:
                             st.error(f"🚨 **CẢNH BÁO ĐỎ RỰC**: Lô này có tỷ lệ nhiễm **{ty_le_nhiem_lo:.2f}%** (> 10%)! Cần kiểm tra ngay!")
