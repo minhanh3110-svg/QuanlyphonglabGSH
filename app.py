@@ -1164,6 +1164,38 @@ else:
                 )
                 
                 st.markdown("---")
+                st.markdown("#### ⏰ Thời gian làm việc cho giống này")
+                st.info("💡 Nhập giờ bắt đầu và kết thúc riêng cho từng giống cây")
+                
+                # Tự động lấy thời gian hiện tại làm mặc định
+                current_time = datetime.now().time()
+                default_end_time = (datetime.now() + timedelta(hours=4)).time()  # Mặc định 4 giờ/giống
+                
+                col_time1, col_time2 = st.columns(2)
+                
+                with col_time1:
+                    gio_bat_dau = st.time_input(
+                        "⏰ Giờ bắt đầu *",
+                        value=current_time,
+                        help="Giờ bắt đầu làm việc với giống này"
+                    )
+                
+                with col_time2:
+                    gio_ket_thuc = st.time_input(
+                        "⏰ Giờ kết thúc *",
+                        value=default_end_time,
+                        help="Giờ kết thúc làm việc với giống này"
+                    )
+                
+                # Hiển thị tổng giờ làm tạm thời
+                tong_gio_temp = tinh_tong_gio_lam(
+                    gio_bat_dau.strftime("%H:%M"),
+                    gio_ket_thuc.strftime("%H:%M")
+                )
+                if tong_gio_temp > 0:
+                    st.success(f"⏱️ Thời gian làm việc: **{tong_gio_temp:.2f} giờ**")
+                
+                st.markdown("---")
                 st.markdown("#### 🧪 Thông tin môi trường")
                 
                 # Môi trường mẹ
@@ -1221,29 +1253,6 @@ else:
                     step=1,
                     help="Số cụm trên mỗi túi con"
                 )
-                
-                st.markdown("---")
-                st.markdown("#### ⏰ Thời gian làm việc")
-                
-                # Tự động lấy thời gian hiện tại
-                current_time = datetime.now().time()
-                default_end_time = (datetime.now() + timedelta(hours=8)).time()
-                
-                col_time1, col_time2 = st.columns(2)
-                
-                with col_time1:
-                    gio_bat_dau = st.time_input(
-                        "Giờ bắt đầu *",
-                        value=current_time,
-                        help="Tự động lấy giờ hiện tại. Bạn có thể chỉnh sửa nếu cần."
-                    )
-                
-                with col_time2:
-                    gio_ket_thuc = st.time_input(
-                        "Giờ kết thúc *",
-                        value=default_end_time,
-                        help="Mặc định +8 giờ. Bạn có thể chỉnh sửa."
-                    )
                 
                 st.markdown("---")
                 st.markdown("#### 📝 Ghi chú")
@@ -2292,11 +2301,12 @@ else:
                     
                     expander_title = f"{canh_bao_icon} | {row['ten_giong']} - {row['so_gian_ke']} | Ngày cấy: {row['ngay_cay'].strftime('%d/%m/%Y') if isinstance(row['ngay_cay'], pd.Timestamp) else row['ngay_cay']} | Tỷ lệ nhiễm: {ty_le_nhiem_lo:.1f}%"
                     
-                    # Kiểm tra xem có phải lô được quét không
-                    is_scanned = (st.session_state.scan_lo_id and 
-                                 str(row['id_nhat_ky_cay']) == str(st.session_state.scan_lo_id))
+                    # Kiểm tra xem có phải lô được quét không - FIX: chuyển về boolean
+                    is_scanned = False
+                    if st.session_state.scan_lo_id:
+                        is_scanned = (str(row['id_nhat_ky_cay']) == str(st.session_state.scan_lo_id))
                     
-                    with st.expander(expander_title, expanded=is_scanned):
+                    with st.expander(expander_title, expanded=bool(is_scanned)):
                         # Hiển thị cảnh báo nếu tỷ lệ > 10%
                         if ty_le_nhiem_lo > 10:
                             st.error(f"🚨 **CẢNH BÁO ĐỎ RỰC**: Lô này có tỷ lệ nhiễm **{ty_le_nhiem_lo:.2f}%** (> 10%)! Cần kiểm tra ngay!")
