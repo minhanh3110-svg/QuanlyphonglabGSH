@@ -1752,10 +1752,25 @@ else:
             ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Mô Soi", "Đối soát Mô Soi", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
         )
     else:
+        # NHÂN VIÊN: Chỉ xem nhật ký cá nhân + báo cáo năng suất/nhiễm
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Quản lý Mô Soi", "Quản lý Kho Môi trường"]
+            ["Báo cáo Cá nhân"]
         )
+        
+        st.sidebar.markdown("---")
+        st.sidebar.info("""
+        **👤 Quyền Nhân viên:**
+        
+        Bạn chỉ có quyền xem:
+        - ✅ Nhật ký cá nhân
+        - ✅ Báo cáo năng suất cá nhân
+        - ✅ Tỷ lệ nhiễm cá nhân
+        
+        ⚠️ Không có quyền nhập liệu hoặc quản lý.
+        
+        💡 Liên hệ Admin nếu cần thay đổi dữ liệu.
+        """)
     
     # ========== DASHBOARD VIỆC CẦN LÀM GẤP (ADMIN) ==========
     if is_admin and st.session_state.get('show_urgent_tasks', False):
@@ -1828,8 +1843,324 @@ else:
         
         st.markdown("---")
     
-    # ========== TRANG NHẬP LIỆU ==========
-    if menu == "Nhập liệu":
+    # ========== TRANG BÁO CÁO CÁ NHÂN (NHÂN VIÊN) ==========
+    if menu == "Báo cáo Cá nhân":
+        st.header(f"📊 Báo cáo Cá nhân - {user_info['ten_nhan_vien']}")
+        st.markdown(f"**Mã nhân viên:** {user_info['ma_nhan_vien']}")
+        st.markdown("---")
+        
+        # Tabs
+        tab1, tab2, tab3 = st.tabs(["📝 Nhật ký của tôi", "📈 Năng suất", "🔬 Tỷ lệ nhiễm"])
+        
+        # Tab 1: Nhật ký cá nhân
+        with tab1:
+            st.subheader("📝 Nhật ký cấy của tôi")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # Lọc theo ngày
+            col_filter1, col_filter2 = st.columns(2)
+            with col_filter1:
+                ngay_bat_dau = st.date_input(
+                    "Từ ngày",
+                    value=date.today() - timedelta(days=30)
+                )
+            with col_filter2:
+                ngay_ket_thuc = st.date_input(
+                    "Đến ngày",
+                    value=date.today()
+                )
+            
+            query = '''
+                SELECT 
+                    id, ngay_cay, ten_giong, chu_ky, tinh_trang,
+                    so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
+                    tong_so_cay_con, gio_bat_dau, gio_ket_thuc,
+                    tong_gio_lam, nang_suat, ghi_chu
+                FROM nhat_ky_cay
+                WHERE ma_nhan_vien = ?
+                  AND ngay_cay BETWEEN ? AND ?
+                ORDER BY ngay_cay DESC, id DESC
+            '''
+            
+            df = pd.read_sql_query(
+                query, conn,
+                params=(user_info['ma_nhan_vien'], 
+                       ngay_bat_dau.strftime('%Y-%m-%d'),
+                       ngay_ket_thuc.strftime('%Y-%m-%d'))
+            )
+            conn.close()
+            
+            if len(df) > 0:
+                # Metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Tổng lô cấy", len(df))
+                with col2:
+                    st.metric("Tổng cây con", f"{df['tong_so_cay_con'].sum():,}")
+                with col3:
+                    st.metric("Tổng giờ làm", f"{df['tong_gio_lam'].sum():.1f}h")
+                with col4:
+                    st.metric("Năng suất TB", f"{df['nang_suat'].mean():.1f}")
+                
+                st.markdown("---")
+                
+                # Hiển thị bảng
+                df_display = df.rename(columns={
+                    'id': 'ID',
+                    'ngay_cay': 'Ngày cấy',
+                    'ten_giong': 'Giống',
+                    'chu_ky': 'Chu kỳ',
+                    'tinh_trang': 'Tình trạng',
+                    'so_tui_me': 'Túi mẹ',
+                    'so_cum_tui_me': 'Cụm/Túi mẹ',
+                    'so_tui_con': 'Túi con',
+                    'so_cum_tui_con': 'Cụm/Túi con',
+                    'tong_so_cay_con': 'Tổng cây',
+                    'gio_bat_dau': 'Giờ BĐ',
+                    'gio_ket_thuc': 'Giờ KT',
+                    'tong_gio_lam': 'Giờ làm',
+                    'nang_suat': 'Năng suất',
+                    'ghi_chu': 'Ghi chú'
+                })
+                
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
+                
+                # Download
+                st.download_button(
+                    "📥 Tải xuống Excel",
+                    data=df_display.to_csv(index=False).encode('utf-8-sig'),
+                    file_name=f"nhat_ky_{user_info['ma_nhan_vien']}_{date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("ℹ️ Không có dữ liệu trong khoảng thời gian này.")
+        
+        # Tab 2: Năng suất
+        with tab2:
+            st.subheader("📈 Báo cáo Năng suất")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # Lọc theo tháng
+            col1, col2 = st.columns(2)
+            with col1:
+                thang_filter = st.selectbox(
+                    "Chọn tháng",
+                    options=list(range(1, 13)),
+                    index=date.today().month - 1
+                )
+            with col2:
+                nam_filter = st.number_input(
+                    "Năm",
+                    min_value=2020,
+                    max_value=2030,
+                    value=date.today().year
+                )
+            
+            query = '''
+                SELECT 
+                    ten_giong,
+                    chu_ky,
+                    COUNT(*) AS so_lo,
+                    SUM(so_tui_con) AS tong_tui,
+                    SUM(tong_so_cay_con) AS tong_cay,
+                    SUM(tong_gio_lam) AS tong_gio,
+                    AVG(nang_suat) AS nang_suat_tb
+                FROM nhat_ky_cay
+                WHERE ma_nhan_vien = ?
+                  AND thang = ?
+                  AND strftime('%Y', ngay_cay) = ?
+                GROUP BY ten_giong, chu_ky
+                ORDER BY tong_cay DESC
+            '''
+            
+            df_nang_suat = pd.read_sql_query(
+                query, conn,
+                params=(user_info['ma_nhan_vien'], thang_filter, str(nam_filter))
+            )
+            conn.close()
+            
+            if len(df_nang_suat) > 0:
+                # Tổng hợp
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Tổng cây cấy", f"{df_nang_suat['tong_cay'].sum():,}")
+                with col2:
+                    st.metric("Tổng giờ làm", f"{df_nang_suat['tong_gio'].sum():.1f}h")
+                with col3:
+                    st.metric("Năng suất TB", f"{df_nang_suat['nang_suat_tb'].mean():.1f}")
+                
+                st.markdown("---")
+                
+                # Biểu đồ
+                import plotly.express as px
+                
+                fig = px.bar(
+                    df_nang_suat,
+                    x='ten_giong',
+                    y='tong_cay',
+                    color='chu_ky',
+                    title=f"Năng suất tháng {thang_filter}/{nam_filter}",
+                    labels={'tong_cay': 'Tổng cây', 'ten_giong': 'Giống'}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Bảng chi tiết
+                st.markdown("#### Chi tiết theo giống")
+                df_display = df_nang_suat.rename(columns={
+                    'ten_giong': 'Giống',
+                    'chu_ky': 'Chu kỳ',
+                    'so_lo': 'Số lô',
+                    'tong_tui': 'Tổng túi',
+                    'tong_cay': 'Tổng cây',
+                    'tong_gio': 'Tổng giờ',
+                    'nang_suat_tb': 'Năng suất TB'
+                })
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
+            else:
+                st.info(f"ℹ️ Không có dữ liệu tháng {thang_filter}/{nam_filter}.")
+        
+        # Tab 3: Tỷ lệ nhiễm
+        with tab3:
+            st.subheader("🔬 Tỷ lệ Nhiễm")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # Lọc theo khoảng thời gian
+            col1, col2 = st.columns(2)
+            with col1:
+                ngay_bd = st.date_input(
+                    "Từ ngày",
+                    value=date.today() - timedelta(days=30),
+                    key="nhiem_tu_ngay"
+                )
+            with col2:
+                ngay_kt = st.date_input(
+                    "Đến ngày",
+                    value=date.today(),
+                    key="nhiem_den_ngay"
+                )
+            
+            query = '''
+                SELECT 
+                    tinh_trang,
+                    COUNT(*) AS so_lo,
+                    SUM(so_tui_con) AS tong_tui
+                FROM nhat_ky_cay
+                WHERE ma_nhan_vien = ?
+                  AND ngay_cay BETWEEN ? AND ?
+                GROUP BY tinh_trang
+            '''
+            
+            df_nhiem = pd.read_sql_query(
+                query, conn,
+                params=(user_info['ma_nhan_vien'],
+                       ngay_bd.strftime('%Y-%m-%d'),
+                       ngay_kt.strftime('%Y-%m-%d'))
+            )
+            conn.close()
+            
+            if len(df_nhiem) > 0:
+                # Tính tổng
+                tong_tui = df_nhiem['tong_tui'].sum()
+                tui_sach = df_nhiem[df_nhiem['tinh_trang'] == 'Sạch']['tong_tui'].sum() if 'Sạch' in df_nhiem['tinh_trang'].values else 0
+                
+                # Phân loại theo mã
+                tui_khuan = 0  # Mã 5
+                tui_huy = 0    # Mã 9
+                
+                for _, row in df_nhiem.iterrows():
+                    ma = get_ma_tinh_trang(row['tinh_trang'])
+                    if ma:
+                        loai, _, _ = phan_loai_tinh_trang(ma)
+                        if loai == 'khuan':
+                            tui_khuan += row['tong_tui']
+                        elif loai == 'huy':
+                            tui_huy += row['tong_tui']
+                
+                ty_le_sach = (tui_sach / tong_tui * 100) if tong_tui > 0 else 0
+                ty_le_khuan = (tui_khuan / tong_tui * 100) if tong_tui > 0 else 0
+                ty_le_huy = (tui_huy / tong_tui * 100) if tong_tui > 0 else 0
+                
+                # Metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Tổng túi", f"{tong_tui:,}")
+                with col2:
+                    st.metric("✅ Sạch", f"{ty_le_sach:.1f}%", delta=None, delta_color="normal")
+                with col3:
+                    st.metric("⚠️ Khuẩn (Mã 5)", f"{ty_le_khuan:.1f}%", delta=None, delta_color="off")
+                with col4:
+                    st.metric("🔴 Hủy (Mã 9)", f"{ty_le_huy:.1f}%", delta=None, delta_color="inverse")
+                
+                # Đánh giá
+                if ty_le_huy > 15:
+                    st.error(f"""
+                    🔴 **CẢNH BÁO CAO!**
+                    
+                    Tỷ lệ hủy bỏ của bạn là **{ty_le_huy:.1f}%** (cao hơn mức cho phép 15%)
+                    
+                    **Nguyên nhân có thể:**
+                    - Môi trường không đảm bảo
+                    - Kỹ thuật cấy chưa tốt
+                    - Thiết bị tiệt trùng kém
+                    
+                    💡 **Khuyến nghị:** Cần cải thiện quy trình ngay
+                    """)
+                elif ty_le_huy > 10:
+                    st.warning(f"""
+                    ⚠️ **CẦN CHÚ Ý!**
+                    
+                    Tỷ lệ hủy bỏ của bạn là **{ty_le_huy:.1f}%** (cần giảm xuống < 10%)
+                    
+                    💡 **Khuyến nghị:** Kiểm tra lại quy trình
+                    """)
+                elif ty_le_sach >= 85:
+                    st.success(f"""
+                    ✅ **RẤT TỐT!**
+                    
+                    Tỷ lệ sạch của bạn là **{ty_le_sach:.1f}%** - Xuất sắc!
+                    
+                    🎉 Tiếp tục duy trì chất lượng này!
+                    """)
+                else:
+                    st.info(f"""
+                    📊 **BÌN THƯỜNG**
+                    
+                    Tỷ lệ sạch: **{ty_le_sach:.1f}%**
+                    
+                    💡 Cố gắng đạt mức > 85%
+                    """)
+                
+                st.markdown("---")
+                
+                # Biểu đồ tròn
+                import plotly.graph_objects as go
+                
+                fig = go.Figure(data=[go.Pie(
+                    labels=['Sạch', 'Khuẩn (Mã 5)', 'Hủy (Mã 9)'],
+                    values=[tui_sach, tui_khuan, tui_huy],
+                    marker=dict(colors=['#28a745', '#ff8c00', '#8b0000'])
+                )])
+                
+                fig.update_layout(title="Phân bố tình trạng")
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Bảng chi tiết
+                st.markdown("#### Chi tiết theo tình trạng")
+                df_display = df_nhiem.rename(columns={
+                    'tinh_trang': 'Tình trạng',
+                    'so_lo': 'Số lô',
+                    'tong_tui': 'Tổng túi'
+                })
+                df_display['Tỷ lệ %'] = (df_display['Tổng túi'] / tong_tui * 100).round(1)
+                st.dataframe(df_display, use_container_width=True, hide_index=True)
+            else:
+                st.info("ℹ️ Không có dữ liệu trong khoảng thời gian này.")
+    
+    # ========== TRANG NHẬP LIỆU (CHỈ ADMIN) ==========
+    elif menu == "Nhập liệu" and is_admin:
         st.header("📝 Nhập liệu mới")
         st.markdown("---")
         
@@ -2613,8 +2944,8 @@ else:
         else:
             st.info("ℹ️ Chưa có nhật ký nào hôm nay. Hãy bắt đầu nhập liệu!")
     
-    # ========== TRANG IN TEM NHÃN ==========
-    elif menu == "In tem nhãn":
+    # ========== TRANG IN TEM NHÃN (CHỈ ADMIN) ==========
+    elif menu == "In tem nhãn" and is_admin:
         st.header("🏷️ In Tem Nhãn")
         st.markdown("---")
         
@@ -2815,8 +3146,8 @@ else:
         else:
             st.info("ℹ️ Chưa có dữ liệu. Vui lòng nhập liệu ở trang 'Nhập liệu' trước.")
     
-    # ========== TRANG BÁO CÁO NĂNG SUẤT ==========
-    elif menu == "Báo cáo Năng suất":
+    # ========== TRANG BÁO CÁO NĂNG SUẤT (CHỈ ADMIN) ==========
+    elif menu == "Báo cáo Năng suất" and is_admin:
         st.header("📊 Báo cáo Năng suất")
         st.markdown("---")
         
@@ -3299,8 +3630,8 @@ else:
         else:
             st.info("ℹ️ Chưa có dữ liệu. Vui lòng nhập liệu ở tab 'Nhập liệu'.")
     
-    # ========== TRANG QUẢN LÝ PHÒNG SÁNG ==========
-    elif menu == "Quản lý Phòng Sáng":
+    # ========== TRANG QUẢN LÝ PHÒNG SÁNG (CHỈ ADMIN) ==========
+    elif menu == "Quản lý Phòng Sáng" and is_admin:
         st.header("☀️ Quản lý Phòng Sáng")
         st.markdown("---")
         
@@ -3623,8 +3954,8 @@ else:
         else:
             st.info("ℹ️ Chưa có dữ liệu trong phòng sáng.")
     
-    # ========== TRANG QUẢN LÝ MÔ SOI ==========
-    elif menu == "Quản lý Mô Soi":
+    # ========== TRANG QUẢN LÝ MÔ SOI (CHỈ ADMIN) ==========
+    elif menu == "Quản lý Mô Soi" and is_admin:
         st.header("🔬 Quản lý Mô Soi")
         st.markdown("**Mô Soi** là kết quả kiểm tra từ chu kỳ trước (Phòng Sáng) - nguồn cung cấp Mô Mẹ cho chu kỳ tiếp theo")
         st.markdown("---")
@@ -3922,8 +4253,8 @@ else:
             else:
                 st.info("ℹ️ Chưa có dữ liệu để thống kê.")
     
-    # ========== TRANG ĐỐI SOÁT MÔ SOI ==========
-    elif menu == "Đối soát Mô Soi":
+    # ========== TRANG ĐỐI SOÁT MÔ SOI (CHỈ ADMIN) ==========
+    elif menu == "Đối soát Mô Soi" and is_admin:
         st.header("🔍 Đối soát Mô Soi vs Mô Mẹ đã cấy")
         st.markdown("**Check & Balance:** Kiểm tra tổng Mô Soi có khớp với tổng Mô Mẹ đã cấy hay không")
         st.markdown("---")
@@ -4022,8 +4353,8 @@ else:
             3. Hệ thống sẽ tự động đối soát
             """)
     
-    # ========== TRANG QUẢN LÝ KHO MÔI TRƯỜNG ==========
-    elif menu == "Quản lý Kho Môi trường":
+    # ========== TRANG QUẢN LÝ KHO MÔI TRƯỜNG (CHỈ ADMIN) ==========
+    elif menu == "Quản lý Kho Môi trường" and is_admin:
         st.header("🧪 Quản lý Kho Môi trường")
         st.markdown("Nhập kho môi trường mới và theo dõi tồn kho")
         st.markdown("---")
