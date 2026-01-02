@@ -437,6 +437,36 @@ def init_database():
         )
     ''')
     
+    # Bảng danh mục Vị trí Kho môi trường
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS danh_muc_vi_tri_kho (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vi_tri_kho TEXT NOT NULL UNIQUE,
+            ghi_chu TEXT,
+            ngay_tao TEXT
+        )
+    ''')
+    
+    # Bảng Kho Môi trường
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS kho_moi_truong (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ma_lo TEXT UNIQUE NOT NULL,
+            ma_so_moi_truong INTEGER NOT NULL,
+            ten_moi_truong TEXT NOT NULL,
+            ngay_do TEXT NOT NULL,
+            tuan_do INTEGER NOT NULL,
+            nam INTEGER NOT NULL,
+            so_luong_ban_dau INTEGER NOT NULL,
+            so_luong_con_lai INTEGER NOT NULL,
+            vi_tri_kho TEXT NOT NULL,
+            nguoi_do TEXT,
+            ghi_chu TEXT,
+            ngay_tao TEXT NOT NULL,
+            FOREIGN KEY (ma_so_moi_truong) REFERENCES danh_muc_moi_truong(ma_so)
+        )
+    ''')
+    
     # Bảng danh mục môi trường (có mã số)
     c.execute('''
         CREATE TABLE IF NOT EXISTS danh_muc_moi_truong (
@@ -627,6 +657,103 @@ def get_danh_sach_gian_ke():
     result = [row[0] for row in c.fetchall()]
     conn.close()
     return result
+
+def get_danh_sach_vi_tri_kho():
+    """Lấy danh sách vị trí kho môi trường từ database"""
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    c.execute('SELECT vi_tri_kho FROM danh_muc_vi_tri_kho ORDER BY vi_tri_kho')
+    result = [row[0] for row in c.fetchall()]
+    conn.close()
+    return result
+
+def tao_ma_lo_moi_truong():
+    """Tạo mã lô môi trường tự động theo format: MT-YYYYMMDD-XXX"""
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    ngay_hom_nay = datetime.now().strftime("%Y%m%d")
+    
+    # Đếm số lô đã tạo trong ngày
+    c.execute('''
+        SELECT COUNT(*) FROM kho_moi_truong 
+        WHERE ma_lo LIKE ?
+    ''', (f'MT-{ngay_hom_nay}-%',))
+    count = c.fetchone()[0]
+    conn.close()
+    
+    # Tạo mã mới
+    so_thu_tu = count + 1
+    ma_lo = f"MT-{ngay_hom_nay}-{so_thu_tu:03d}"
+    return ma_lo
+
+def khau_tru_moi_truong_tu_kho(ma_so_moi_truong, so_luong_can_dung):
+    """
+    Khấu trừ môi trường từ kho theo nguyên tắc FIFO
+    Returns: (success: bool, message: str, danh_sach_lo_su_dung: list)
+    """
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    
+    # Lấy danh sách lô môi trường còn hàng, sắp xếp theo ngày đổ (FIFO)
+    c.execute('''
+        SELECT id, ma_lo, so_luong_con_lai, ngay_do 
+        FROM kho_moi_truong 
+        WHERE ma_so_moi_truong = ? AND so_luong_con_lai > 0
+        ORDER BY ngay_do ASC
+    ''', (ma_so_moi_truong,))
+    
+    danh_sach_lo = c.fetchall()
+    
+    if not danh_sach_lo:
+        conn.close()
+        return False, f"⚠️ Không tìm thấy lô môi trường mã {ma_so_moi_truong} trong kho!", []
+    
+    # Tính tổng số lượng còn lại
+    tong_ton_kho = sum([lo[2] for lo in danh_sach_lo])
+    
+    if tong_ton_kho < so_luong_can_dung:
+        conn.close()
+        return False, f"⚠️ Kho không đủ! Cần: {so_luong_can_dung} túi, Còn: {tong_ton_kho} túi", []
+    
+    # Thực hiện khấu trừ FIFO
+    so_luong_con_thieu = so_luong_can_dung
+    danh_sach_lo_su_dung = []
+    
+    for lo in danh_sach_lo:
+        if so_luong_con_thieu <= 0:
+            break
+        
+        lo_id, ma_lo, so_luong_con_lai, ngay_do = lo
+        
+        if so_luong_con_lai >= so_luong_con_thieu:
+            # Lô này đủ để trừ hết
+            so_luong_tru = so_luong_con_thieu
+            so_luong_moi = so_luong_con_lai - so_luong_tru
+            so_luong_con_thieu = 0
+        else:
+            # Lô này không đủ, trừ hết và chuyển lô tiếp theo
+            so_luong_tru = so_luong_con_lai
+            so_luong_moi = 0
+            so_luong_con_thieu -= so_luong_tru
+        
+        # Cập nhật số lượng còn lại
+        c.execute('''
+            UPDATE kho_moi_truong 
+            SET so_luong_con_lai = ? 
+            WHERE id = ?
+        ''', (so_luong_moi, lo_id))
+        
+        danh_sach_lo_su_dung.append({
+            'ma_lo': ma_lo,
+            'so_luong_tru': so_luong_tru,
+            'ngay_do': ngay_do
+        })
+    
+    conn.commit()
+    conn.close()
+    
+    message = f"✅ Đã khấu trừ {so_luong_can_dung} túi từ {len(danh_sach_lo_su_dung)} lô"
+    return True, message, danh_sach_lo_su_dung
 
 def get_danh_sach_moi_truong():
     """Lấy danh sách môi trường từ database (trả về dict: mã số -> tên)"""
@@ -1113,12 +1240,12 @@ else:
     if is_admin:
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý danh mục", "Quản lý tài khoản"]
+            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
         )
     else:
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng"]
+            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Quản lý Kho Môi trường"]
         )
     
     # ========== TRANG NHẬP LIỆU ==========
@@ -1497,11 +1624,34 @@ else:
                         ))
                         
                         conn.commit()
+                        
+                        # ========== KHẤU TRỪ MÔI TRƯỜNG TỰ ĐỘNG (FIFO) ==========
+                        # Khấu trừ môi trường con (số lượng = số túi con)
+                        success, message, danh_sach_lo = khau_tru_moi_truong_tu_kho(
+                            ma_so_moi_truong_con,
+                            so_tui_con
+                        )
+                        
+                        if not success:
+                            # Nếu không đủ môi trường, rollback và thông báo
+                            conn.rollback()
+                            conn.close()
+                            st.error(f"❌ {message}")
+                            st.warning("⚠️ Không thể lưu nhật ký cấy. Vui lòng nhập thêm môi trường vào kho!")
+                            st.info("💡 Vào 'Quản lý Kho Môi trường' → 'Nhập kho' để thêm môi trường mới")
+                            st.stop()
+                        
                         conn.close()
                         
+                        # Hiển thị thông tin khấu trừ
                         st.success("✅ Lưu dữ liệu thành công! Đã tự động tạo bản ghi trong phòng sáng.")
                         
-                        # Hiển thị nút in tem
+                        # Chi tiết môi trường đã xuất
+                        with st.expander("📦 Chi tiết xuất môi trường từ kho (FIFO)"):
+                            st.success(message)
+                            for lo in danh_sach_lo:
+                                st.text(f"• Lô {lo['ma_lo']} (Ngày đổ: {lo['ngay_do']}): -{lo['so_luong_tru']} túi")
+                        
                         st.markdown("---")
                         st.markdown("### 🏷️ In tem nhãn")
                         
@@ -2579,12 +2729,262 @@ else:
         else:
             st.info("ℹ️ Chưa có dữ liệu trong phòng sáng.")
     
+    # ========== TRANG QUẢN LÝ KHO MÔI TRƯỜNG ==========
+    elif menu == "Quản lý Kho Môi trường":
+        st.header("🧪 Quản lý Kho Môi trường")
+        st.markdown("Nhập kho môi trường mới và theo dõi tồn kho")
+        st.markdown("---")
+        
+        # Tabs: Nhập kho | Tồn kho | Lịch sử xuất
+        tab_nhap, tab_ton, tab_lich_su = st.tabs(["📥 Nhập kho", "📊 Tồn kho", "📜 Lịch sử xuất"])
+        
+        # ========== TAB 1: NHẬP KHO MÔI TRƯỜNG ==========
+        with tab_nhap:
+            st.subheader("📥 Nhập môi trường mới vào kho")
+            
+            danh_sach_moi_truong = get_danh_sach_moi_truong()
+            danh_sach_vi_tri_kho = get_danh_sach_vi_tri_kho()
+            
+            if len(danh_sach_moi_truong) == 0:
+                st.warning("⚠️ Chưa có môi trường trong danh mục. Vui lòng thêm tại 'Quản lý danh mục' → 'Môi trường'")
+            elif len(danh_sach_vi_tri_kho) == 0:
+                st.info("💡 Chưa có vị trí kho. Thêm ngay bên dưới hoặc tại 'Quản lý danh mục'")
+                
+                # Form thêm nhanh vị trí kho
+                with st.expander("➕ Thêm nhanh vị trí kho"):
+                    with st.form("form_them_nhanh_vi_tri_kho", clear_on_submit=True):
+                        vi_tri_kho_moi = st.text_input(
+                            "Vị trí kho *",
+                            placeholder="VD: Kho A1, Kệ môi trường tầng 1",
+                            help="Nhập vị trí lưu trữ môi trường"
+                        )
+                        submitted = st.form_submit_button("➕ Thêm", use_container_width=True)
+                        
+                        if submitted and vi_tri_kho_moi.strip():
+                            conn = sqlite3.connect('data.db')
+                            c = conn.cursor()
+                            try:
+                                c.execute('''
+                                    INSERT INTO danh_muc_vi_tri_kho (vi_tri_kho, ngay_tao)
+                                    VALUES (?, ?)
+                                ''', (vi_tri_kho_moi.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                                conn.commit()
+                                st.success(f"✅ Đã thêm vị trí kho: {vi_tri_kho_moi}")
+                                st.rerun()
+                            except sqlite3.IntegrityError:
+                                st.error(f"❌ Vị trí kho '{vi_tri_kho_moi}' đã tồn tại!")
+                            finally:
+                                conn.close()
+            
+            # Form nhập kho môi trường (TỐI ƯU MOBILE)
+            if len(danh_sach_moi_truong) > 0:
+                with st.form("form_nhap_kho_moi_truong", clear_on_submit=True):
+                    st.markdown("#### 📝 Thông tin lô môi trường")
+                    
+                    # Tự động tạo mã lô
+                    ma_lo_moi = tao_ma_lo_moi_truong()
+                    st.info(f"🏷️ Mã lô tự động: **{ma_lo_moi}**")
+                    
+                    # Chọn loại môi trường
+                    dict_ten_to_ma = {v: k for k, v in danh_sach_moi_truong.items()}
+                    ten_moi_truong_chon = st.selectbox(
+                        "Loại môi trường *",
+                        options=list(danh_sach_moi_truong.values()),
+                        help="Chọn loại môi trường đã đổ"
+                    )
+                    ma_so_moi_truong = dict_ten_to_ma[ten_moi_truong_chon]
+                    
+                    # Ngày đổ
+                    ngay_do = st.date_input(
+                        "Ngày đổ môi trường *",
+                        value=date.today(),
+                        help="Ngày thực hiện đổ môi trường"
+                    )
+                    
+                    # Tự động tính tuần và năm
+                    tuan_do = tinh_tuan(ngay_do)
+                    nam = ngay_do.year
+                    st.info(f"📆 Tuần: {tuan_do} | Năm: {nam}")
+                    
+                    # Số lượng
+                    so_luong = st.number_input(
+                        "Số lượng túi/hộp đã đổ *",
+                        min_value=1,
+                        value=100,
+                        step=10,
+                        help="Tổng số túi hoặc hộp môi trường đã đổ"
+                    )
+                    
+                    # Vị trí kho
+                    if len(danh_sach_vi_tri_kho) > 0:
+                        vi_tri_kho = st.selectbox(
+                            "Vị trí lưu trữ *",
+                            options=danh_sach_vi_tri_kho,
+                            help="Chọn vị trí kho lưu trữ"
+                        )
+                    else:
+                        vi_tri_kho = st.text_input(
+                            "Vị trí lưu trữ (tạm thời) *",
+                            placeholder="VD: Kho A1",
+                            help="Nên thêm vào danh mục để dễ quản lý"
+                        )
+                    
+                    # Người đổ
+                    nguoi_do = st.text_input(
+                        "Người thực hiện",
+                        value=st.session_state.user_info['ten_nhan_vien'] if not is_admin else "",
+                        placeholder="VD: Nguyễn Văn A",
+                        help="Tên người đổ môi trường"
+                    )
+                    
+                    # Ghi chú
+                    ghi_chu = st.text_area(
+                        "Ghi chú",
+                        placeholder="VD: Lô môi trường tốt, màu sắc đạt chuẩn",
+                        help="Thông tin bổ sung về lô môi trường"
+                    )
+                    
+                    # Nút submit
+                    submitted = st.form_submit_button("💾 Lưu vào kho", use_container_width=True, type="primary")
+                    
+                    if submitted:
+                        if vi_tri_kho.strip():
+                            conn = sqlite3.connect('data.db')
+                            c = conn.cursor()
+                            try:
+                                c.execute('''
+                                    INSERT INTO kho_moi_truong (
+                                        ma_lo, ma_so_moi_truong, ten_moi_truong,
+                                        ngay_do, tuan_do, nam,
+                                        so_luong_ban_dau, so_luong_con_lai,
+                                        vi_tri_kho, nguoi_do, ghi_chu, ngay_tao
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', (
+                                    ma_lo_moi,
+                                    ma_so_moi_truong,
+                                    ten_moi_truong_chon,
+                                    ngay_do.strftime("%Y-%m-%d"),
+                                    tuan_do,
+                                    nam,
+                                    so_luong,
+                                    so_luong,  # Ban đầu còn lại = số lượng đổ
+                                    vi_tri_kho.strip(),
+                                    nguoi_do.strip() if nguoi_do.strip() else None,
+                                    ghi_chu.strip() if ghi_chu.strip() else None,
+                                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                ))
+                                conn.commit()
+                                st.success(f"✅ Đã nhập kho thành công! Mã lô: {ma_lo_moi}")
+                                st.balloons()
+                                st.rerun()
+                            except sqlite3.IntegrityError:
+                                st.error(f"❌ Mã lô '{ma_lo_moi}' đã tồn tại!")
+                            except Exception as e:
+                                st.error(f"❌ Lỗi: {str(e)}")
+                            finally:
+                                conn.close()
+                        else:
+                            st.warning("⚠️ Vui lòng nhập vị trí kho!")
+        
+        # ========== TAB 2: TỒN KHO ==========
+        with tab_ton:
+            st.subheader("📊 Báo cáo Tồn kho Môi trường")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # Tổng hợp tồn kho theo loại
+            df_ton_kho = pd.read_sql_query('''
+                SELECT 
+                    ten_moi_truong AS "Loại môi trường",
+                    SUM(so_luong_con_lai) AS "Tổng tồn",
+                    COUNT(*) AS "Số lô",
+                    GROUP_CONCAT(DISTINCT vi_tri_kho) AS "Vị trí"
+                FROM kho_moi_truong
+                WHERE so_luong_con_lai > 0
+                GROUP BY ma_so_moi_truong, ten_moi_truong
+                ORDER BY "Tổng tồn" DESC
+            ''', conn)
+            
+            if len(df_ton_kho) > 0:
+                st.markdown("#### 📦 Tổng tồn kho theo loại")
+                st.dataframe(df_ton_kho, use_container_width=True, hide_index=True)
+                
+                # Biểu đồ
+                fig = px.bar(
+                    df_ton_kho,
+                    x="Loại môi trường",
+                    y="Tổng tồn",
+                    title="Biểu đồ Tồn kho Môi trường",
+                    color="Tổng tồn",
+                    color_continuous_scale="Greens"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("---")
+                st.markdown("#### 📋 Chi tiết từng lô")
+                
+                # Chi tiết từng lô
+                df_chi_tiet = pd.read_sql_query('''
+                    SELECT 
+                        ma_lo AS "Mã lô",
+                        ten_moi_truong AS "Loại",
+                        ngay_do AS "Ngày đổ",
+                        tuan_do AS "Tuần",
+                        so_luong_ban_dau AS "Số lượng đổ",
+                        so_luong_con_lai AS "Còn lại",
+                        ROUND(CAST(so_luong_con_lai AS FLOAT) / so_luong_ban_dau * 100, 1) AS "% Còn",
+                        vi_tri_kho AS "Vị trí",
+                        nguoi_do AS "Người đổ"
+                    FROM kho_moi_truong
+                    WHERE so_luong_con_lai > 0
+                    ORDER BY ngay_do ASC
+                ''', conn)
+                
+                # Tính số tuần đã lưu kho
+                df_chi_tiet['Tuần lưu'] = df_chi_tiet['Ngày đổ'].apply(
+                    lambda x: (datetime.now() - datetime.strptime(x, "%Y-%m-%d")).days // 7
+                )
+                
+                # Highlight môi trường cũ (> 8 tuần)
+                def highlight_old(row):
+                    if row['Tuần lưu'] > 8:
+                        return ['background-color: #fff3cd'] * len(row)
+                    elif row['% Còn'] < 20:
+                        return ['background-color: #f8d7da'] * len(row)
+                    return [''] * len(row)
+                
+                styled_df = df_chi_tiet.style.apply(highlight_old, axis=1)
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                
+                # Cảnh báo
+                df_canh_bao = df_chi_tiet[df_chi_tiet['Tuần lưu'] > 8]
+                if len(df_canh_bao) > 0:
+                    st.warning(f"⚠️ **{len(df_canh_bao)} lô đã lưu kho quá lâu (> 8 tuần)**. Nên sử dụng sớm để đảm bảo chất lượng!")
+                
+                df_sap_het = df_chi_tiet[df_chi_tiet['% Còn'] < 20]
+                if len(df_sap_het) > 0:
+                    st.info(f"💡 **{len(df_sap_het)} lô sắp hết** (< 20% còn lại). Cần đổ thêm!")
+            else:
+                st.info("ℹ️ Chưa có môi trường trong kho. Hãy nhập kho tại tab 'Nhập kho'.")
+            
+            conn.close()
+        
+        # ========== TAB 3: LỊCH SỬ XUẤT ==========
+        with tab_lich_su:
+            st.subheader("📜 Lịch sử Xuất môi trường")
+            st.info("🚧 Tính năng đang phát triển...")
+            st.markdown("""
+            Lịch sử xuất sẽ được tự động ghi nhận khi:
+            - Nhân viên cấy lưu nhật ký cấy
+            - Hệ thống tự động khấu trừ môi trường từ kho (FIFO)
+            """)
+    
     # ========== TRANG QUẢN LÝ DANH MỤC (CHỈ ADMIN) ==========
     elif menu == "Quản lý danh mục" and is_admin:
         st.header("⚙️ Quản lý danh mục")
         st.markdown("---")
         
-        tab1, tab2, tab3, tab4 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🧪 Môi trường", "📦 Giàn/Kệ"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🧪 Môi trường", "📦 Giàn/Kệ", "🏪 Vị trí Kho"])
         
         # Tab Tên giống
         with tab1:
@@ -3030,6 +3430,98 @@ else:
                 - ✅ Tránh lỗi chính tả
                 - ✅ Thống kê chính xác số túi trên mỗi giàn
                 - ✅ Quản lý kiểm kê hiệu quả
+                """)
+        
+        # TAB 5: QUẢN LÝ VỊ TRÍ KHO MÔI TRƯỜNG
+        with tab5:
+            st.subheader("🏪 Quản lý Vị trí Kho Môi trường")
+            
+            danh_sach_vi_tri_kho = get_danh_sach_vi_tri_kho()
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("#### 📋 Danh sách hiện tại")
+                if len(danh_sach_vi_tri_kho) > 0:
+                    conn = sqlite3.connect('data.db')
+                    df_vtk = pd.read_sql_query('''
+                        SELECT vi_tri_kho AS "Vị trí kho", 
+                               ghi_chu AS "Ghi chú",
+                               ngay_tao AS "Ngày tạo"
+                        FROM danh_muc_vi_tri_kho 
+                        ORDER BY vi_tri_kho
+                    ''', conn)
+                    conn.close()
+                    st.dataframe(df_vtk, use_container_width=True, hide_index=True)
+                else:
+                    st.warning("⚠️ Chưa có vị trí kho nào.")
+            
+            with col2:
+                st.markdown("#### ➕ Thêm mới")
+                with st.form("form_them_vi_tri_kho", clear_on_submit=True):
+                    vi_tri_kho_moi = st.text_input(
+                        "Vị trí kho *", 
+                        placeholder="VD: Kho A1, Kệ MT tầng 2",
+                        key="them_vtk"
+                    )
+                    ghi_chu_vtk = st.text_input(
+                        "Ghi chú",
+                        placeholder="VD: Kho lạnh môi trường",
+                        key="ghi_chu_vtk"
+                    )
+                    submitted = st.form_submit_button("➕ Thêm", use_container_width=True)
+                    
+                    if submitted and vi_tri_kho_moi.strip():
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        try:
+                            c.execute('''
+                                INSERT INTO danh_muc_vi_tri_kho (vi_tri_kho, ghi_chu, ngay_tao)
+                                VALUES (?, ?, ?)
+                            ''', (vi_tri_kho_moi.strip(), ghi_chu_vtk.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                            conn.commit()
+                            st.success(f"✅ Đã thêm: {vi_tri_kho_moi}")
+                            st.rerun()
+                        except sqlite3.IntegrityError:
+                            st.error(f"❌ Vị trí kho '{vi_tri_kho_moi}' đã tồn tại!")
+                        finally:
+                            conn.close()
+            
+            st.markdown("---")
+            st.markdown("#### 🗑️ Xóa")
+            if len(danh_sach_vi_tri_kho) > 0:
+                with st.form("form_xoa_vi_tri_kho", clear_on_submit=True):
+                    vtk_xoa = st.selectbox(
+                        "Chọn vị trí kho cần xóa", 
+                        options=danh_sach_vi_tri_kho, 
+                        key="xoa_vtk"
+                    )
+                    submitted = st.form_submit_button("🗑️ Xóa", use_container_width=True)
+                    
+                    if submitted:
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        c.execute('DELETE FROM danh_muc_vi_tri_kho WHERE vi_tri_kho = ?', (vtk_xoa,))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"✅ Đã xóa: {vtk_xoa}")
+                        st.rerun()
+            else:
+                st.info("Không có vị trí kho để xóa")
+            
+            with st.expander("💡 Hướng dẫn"):
+                st.markdown("""
+                **Vị trí kho môi trường** là nơi lưu trữ các lô môi trường đã đổ.
+                
+                **Ví dụ:**
+                - `Kho A1`, `Kho A2`
+                - `Kệ môi trường tầng 1`
+                - `Tủ lạnh môi trường`
+                
+                **Lợi ích:**
+                - ✅ Dễ dàng tra cứu vị trí lô môi trường
+                - ✅ Quản lý tồn kho theo từng khu vực
+                - ✅ Tối ưu quy trình nhập/xuất kho
                 """)
     
     # ========== TRANG QUẢN LÝ TÀI KHOẢN (CHỈ ADMIN) ==========

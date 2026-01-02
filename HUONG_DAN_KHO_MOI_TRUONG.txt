@@ -1,0 +1,240 @@
+═══════════════════════════════════════════════════════════
+   🧪 HƯỚNG DẪN SỬ DỤNG - QUẢN LÝ KHO MÔI TRƯỜNG
+═══════════════════════════════════════════════════════════
+
+## 📋 TỔNG QUAN
+
+Phân hệ "Quản lý Kho Môi trường" giúp bạn:
+- ✅ Nhập kho môi trường đã đổ
+- ✅ Theo dõi tồn kho theo từng lô
+- ✅ Tự động khấu trừ khi nhân viên cấy sử dụng (FIFO)
+- ✅ Cảnh báo môi trường sắp hết hoặc để quá lâu
+
+───────────────────────────────────────────────────────────
+
+## 🚀 CÁC BƯỚC SỬ DỤNG
+
+### BƯỚC 1: THÊM VỊ TRÍ KHO (Lần đầu)
+
+1. Vào: **"Quản lý danh mục"** → Tab **"🏪 Vị trí Kho"**
+
+2. Thêm các vị trí kho:
+   - Kho A1
+   - Kho A2
+   - Kệ môi trường tầng 1
+   - Tủ lạnh môi trường
+   - ...
+
+3. Có thể thêm ghi chú cho mỗi vị trí
+
+───────────────────────────────────────────────────────────
+
+### BƯỚC 2: NHẬP KHO MÔI TRƯỜNG
+
+1. Vào: **"Quản lý Kho Môi trường"** → Tab **"📥 Nhập kho"**
+
+2. Điền thông tin:
+   - **Loại môi trường**: Chọn từ dropdown (VD: Mã 821 - MS821)
+   - **Ngày đổ**: Ngày thực hiện đổ môi trường
+   - **Số lượng túi/hộp**: VD: 100
+   - **Vị trí kho**: Chọn từ dropdown (VD: Kho A1)
+   - **Người đổ**: Tên người thực hiện
+   - **Ghi chú**: Thông tin bổ sung (tùy chọn)
+
+3. Hệ thống tự động:
+   - ✅ Tạo mã lô: `MT-YYYYMMDD-XXX`
+   - ✅ Tính tuần đổ và năm
+   - ✅ Lưu số lượng ban đầu và còn lại
+
+4. Click **"💾 Lưu vào kho"**
+
+───────────────────────────────────────────────────────────
+
+### BƯỚC 3: NHÂN VIÊN CẤY SỬ DỤNG (TỰ ĐỘNG)
+
+Khi nhân viên vào **"Nhập liệu"** và lưu nhật ký cấy:
+
+1. Nhân viên chọn:
+   - Môi trường con: VD: Mã 821
+   - Số túi con: VD: 50 túi
+
+2. Khi click **"💾 LƯU DỮ LIỆU"**:
+   
+   ✅ Hệ thống **TỰ ĐỘNG**:
+   - Tìm lô môi trường Mã 821 trong kho
+   - Ưu tiên lô **CŨ NHẤT** (FIFO - First In First Out)
+   - Trừ đi **50 túi** từ kho
+   - Hiển thị thông báo chi tiết lô đã xuất
+
+3. Nếu **KHÔNG ĐỦ** môi trường:
+   - ❌ Hệ thống **KHÔNG CHO LƯU**
+   - Hiển thị thông báo: "Kho không đủ! Cần: 50, Còn: 30"
+   - Yêu cầu nhập thêm môi trường
+
+───────────────────────────────────────────────────────────
+
+### BƯỚC 4: THEO DÕI TỒN KHO
+
+Vào: **"Quản lý Kho Môi trường"** → Tab **"📊 Tồn kho"**
+
+#### A. Tổng hợp theo loại:
+- Tên môi trường
+- Tổng tồn (tất cả các lô)
+- Số lô đang còn hàng
+- Vị trí kho
+
+#### B. Chi tiết từng lô:
+- Mã lô (VD: MT-20260102-001)
+- Ngày đổ
+- Số lượng đổ ban đầu
+- Số lượng còn lại
+- % còn lại
+- Tuần lưu kho
+- Vị trí
+- Người đổ
+
+#### C. Cảnh báo tự động:
+
+🟡 **Nền vàng**: Lô đã lưu kho > 8 tuần
+   → Nên sử dụng sớm để đảm bảo chất lượng!
+
+🔴 **Nền đỏ**: Lô còn < 20%
+   → Cần đổ thêm môi trường!
+
+───────────────────────────────────────────────────────────
+
+## 💡 NGUYÊN TẮC FIFO (First In First Out)
+
+### Ví dụ minh họa:
+
+**Kho hiện tại (Mã 821):**
+- Lô MT-20260101-001: Đổ ngày 01/01, Còn 30 túi
+- Lô MT-20260102-001: Đổ ngày 02/01, Còn 100 túi
+
+**Nhân viên cấy cần 50 túi Mã 821:**
+
+Hệ thống tự động:
+1. Ưu tiên lô cũ nhất (01/01)
+2. Trừ 30 túi từ lô MT-20260101-001 → Còn 0
+3. Trừ 20 túi từ lô MT-20260102-001 → Còn 80
+
+**Kết quả:**
+- ✅ Đã xuất 50 túi từ 2 lô
+- ✅ Lô cũ được sử dụng trước
+- ✅ Giảm lãng phí do môi trường để lâu
+
+───────────────────────────────────────────────────────────
+
+## ⚠️ XỬ LÝ LỖI THƯỜNG GẶP
+
+### Lỗi 1: "Kho không đủ!"
+
+**Nguyên nhân**: Số lượng môi trường trong kho < Số túi cần sử dụng
+
+**Giải pháp**:
+1. Vào "Quản lý Kho Môi trường"
+2. Tab "📊 Tồn kho" → Kiểm tra số lượng còn lại
+3. Tab "📥 Nhập kho" → Nhập thêm môi trường mới
+4. Quay lại "Nhập liệu" và thử lại
+
+---
+
+### Lỗi 2: "Không tìm thấy lô môi trường"
+
+**Nguyên nhân**: Chưa nhập kho loại môi trường này
+
+**Giải pháp**:
+1. Vào "Quản lý Kho Môi trường" → "Nhập kho"
+2. Chọn đúng loại môi trường (VD: Mã 821)
+3. Nhập số lượng
+4. Lưu vào kho
+
+---
+
+### Lỗi 3: "Chưa có vị trí kho"
+
+**Nguyên nhân**: Chưa tạo danh mục vị trí kho
+
+**Giải pháp**:
+1. Vào "Quản lý danh mục" → Tab "Vị trí Kho"
+2. Thêm ít nhất 1 vị trí (VD: Kho A1)
+3. Quay lại "Nhập kho"
+
+───────────────────────────────────────────────────────────
+
+## 📊 BÁO CÁO & THỐNG KÊ
+
+### 1. Biểu đồ tồn kho
+- Hiển thị trực quan tổng tồn kho theo từng loại môi trường
+- Màu xanh đậm hơn = Tồn kho nhiều hơn
+
+### 2. Bảng chi tiết
+- Sắp xếp theo ngày đổ (cũ → mới)
+- Highlight tự động các lô cần chú ý
+- Tính số tuần đã lưu kho
+
+### 3. Cảnh báo
+- ⚠️ Số lô đã lưu kho quá lâu (> 8 tuần)
+- 💡 Số lô sắp hết (< 20% còn lại)
+
+───────────────────────────────────────────────────────────
+
+## 🎯 QUY TRÌNH HOÀN CHỈNH
+
+```
+1. NHẬP KHO MÔI TRƯỜNG
+   └─> Bộ phận nấu môi trường nhập kho
+       (Mã lô tự động, ghi ngày đổ, số lượng, vị trí)
+
+2. NHÂN VIÊN CẤY SỬ DỤNG
+   └─> Chọn môi trường con trong form nhập liệu
+       └─> Hệ thống TỰ ĐỘNG khấu trừ (FIFO)
+           ├─> Đủ hàng → Lưu thành công
+           └─> Không đủ → Thông báo lỗi
+
+3. THEO DÕI TỒN KHO
+   └─> Admin/Người quản lý kiểm tra
+       ├─> Xem tổng tồn kho
+       ├─> Xem chi tiết từng lô
+       └─> Nhận cảnh báo sắp hết/để lâu
+```
+
+───────────────────────────────────────────────────────────
+
+## 🎨 TỐI ƯU CHO MOBILE
+
+Form nhập kho được thiết kế thân thiện với điện thoại:
+- ✅ Input lớn, dễ chạm (min 48px)
+- ✅ Font size 16px → Không bị auto-zoom iOS
+- ✅ Layout 1 cột → Dễ cuộn trên màn hình nhỏ
+- ✅ Button full-width → Dễ nhấn
+- ✅ Màu xanh lá (Green Straw Hat) → Nhất quán thương hiệu
+
+───────────────────────────────────────────────────────────
+
+## 🔐 PHÂN QUYỀN
+
+### Admin:
+- ✅ Xem tất cả kho
+- ✅ Nhập kho môi trường
+- ✅ Xem báo cáo tồn kho
+- ✅ Quản lý vị trí kho
+
+### Nhân viên:
+- ✅ Nhập kho môi trường
+- ✅ Xem báo cáo tồn kho (chỉ đọc)
+- ✅ Hệ thống tự động khấu trừ khi cấy
+
+───────────────────────────────────────────────────────────
+
+## 📞 HỖ TRỢ
+
+Nếu cần hỗ trợ:
+1. Kiểm tra lại các bước trong hướng dẫn
+2. Xem mục "Xử lý lỗi thường gặp"
+3. Liên hệ quản trị viên hệ thống
+
+═══════════════════════════════════════════════════════════
+   Green Straw Hat - Happiness Together 🌱
+═══════════════════════════════════════════════════════════
+
