@@ -2191,8 +2191,24 @@ else:
                 # Tự động tính tháng và tuần
                 thang = ngay_cay.month
                 tuan = tinh_tuan(ngay_cay)
+                nam = ngay_cay.year
                 
-                st.info(f"📆 Tháng: {thang} | Tuần: {tuan}")
+                # Hiển thị Tuần và Tháng dưới dạng read-only (Tối ưu mobile)
+                col_tuan, col_thang = st.columns(2)
+                with col_tuan:
+                    st.text_input(
+                        "📊 Tuần cấy",
+                        value=f"Tuần {tuan:02d}",
+                        disabled=True,
+                        help="Tự động tính từ ngày cấy"
+                    )
+                with col_thang:
+                    st.text_input(
+                        "📅 Tháng/Năm",
+                        value=f"Tháng {thang:02d}/{nam}",
+                        disabled=True,
+                        help="Tự động tính từ ngày cấy"
+                    )
                 
                 st.markdown("---")
                 st.markdown("#### 🌿 Thông tin giống")
