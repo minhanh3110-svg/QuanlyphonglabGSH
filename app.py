@@ -1286,79 +1286,84 @@ else:
                 )
                 
                 st.markdown("---")
-                st.markdown("#### 📝 Ghi chú")
+                st.markdown("#### 📝 Ghi chú & Giàn cây")
+                
                 ghi_chu = st.text_area(
                     "Ghi chú",
                     placeholder="Nhập ghi chú nếu có...",
-                    height=100,
+                    height=80,
                     help="Thông tin bổ sung"
                 )
-                    
-                    so_gian_ke = st.text_input(
-                        "Số Giàn/Kệ *",
-                        placeholder="Ví dụ: Giàn A1, Kệ B2, Giàn 1...",
-                        value=f"Giàn {box_cay}",
-                        help="Nhập số giàn/kệ để quản lý vị trí cây trong phòng sáng"
-                    )
                 
-                with col2:
-                    st.markdown("#### 🧪 Thông tin môi trường")
-                    
-                    # Tạo danh sách tên môi trường để chọn (sắp xếp theo tên)
-                    danh_sach_ten_moi_truong = sorted([ten_mt for ten_mt in danh_sach_moi_truong.values()])
-                    
-                    # Tạo dict ngược: tên -> mã số
-                    dict_ten_to_ma = {ten_mt: ma_so for ma_so, ten_mt in danh_sach_moi_truong.items()}
-                    
-                    moi_truong_me = st.selectbox(
-                        "Môi trường mẹ *",
-                        options=danh_sach_ten_moi_truong,
-                        index=0 if len(danh_sach_ten_moi_truong) > 0 else None,
-                        help="Chọn môi trường mẹ từ danh sách"
-                    )
-                    
-                    # Lấy mã số từ tên môi trường đã chọn
-                    ma_so_moi_truong_me = dict_ten_to_ma.get(moi_truong_me, None)
-                    
-                    moi_truong_con = st.selectbox(
-                        "Môi trường con *",
-                        options=danh_sach_ten_moi_truong,
-                        index=0 if len(danh_sach_ten_moi_truong) > 0 else None,
-                        help="Chọn môi trường con từ danh sách"
-                    )
-                    
-                    # Lấy mã số từ tên môi trường đã chọn
-                    ma_so_moi_truong_con = dict_ten_to_ma.get(moi_truong_con, None)
-                    
-                    st.markdown("#### 📊 Thông số túi mẹ")
-                    so_tui_me = st.number_input(
-                        "Số túi mẹ *",
-                        min_value=1,
-                        value=1,
-                        step=1
-                    )
-                    
-                    so_cum_tui_me = st.number_input(
-                        "Số cụm/túi mẹ *",
-                        min_value=1,
-                        value=1,
-                        step=1
-                    )
-                    
-                    st.markdown("#### 📊 Thông số túi con")
-                    so_tui_con = st.number_input(
-                        "Số túi con *",
-                        min_value=1,
-                        value=1,
-                        step=1
-                    )
-                    
-                    so_cum_tui_con = st.number_input(
-                        "Số cụm/túi con *",
-                        min_value=1,
-                        value=1,
-                        step=1
-                    )
+                so_gian_ke = st.text_input(
+                    "Số Giàn/Kệ *",
+                    placeholder="Ví dụ: Giàn A1, Kệ B2, Giàn 1...",
+                    value=f"Giàn {box_cay}",
+                    help="Nhập số giàn/kệ để quản lý vị trí cây trong phòng sáng"
+                )
+                
+                st.markdown("---")
+                st.markdown("#### 🧪 Thông tin môi trường")
+                
+                # Tạo danh sách tên môi trường để chọn (sắp xếp theo tên)
+                danh_sach_ten_moi_truong = sorted([ten_mt for ten_mt in danh_sach_moi_truong.values()])
+                
+                # Tạo dict ngược: tên -> mã số
+                dict_ten_to_ma = {ten_mt: ma_so for ma_so, ten_mt in danh_sach_moi_truong.items()}
+                
+                moi_truong_me = st.selectbox(
+                    "Môi trường mẹ *",
+                    options=danh_sach_ten_moi_truong,
+                    index=0 if len(danh_sach_ten_moi_truong) > 0 else None,
+                    help="Chọn môi trường mẹ từ danh sách"
+                )
+                
+                # Lấy mã số từ tên môi trường đã chọn
+                ma_so_moi_truong_me = dict_ten_to_ma.get(moi_truong_me, None)
+                
+                moi_truong_con = st.selectbox(
+                    "Môi trường con *",
+                    options=danh_sach_ten_moi_truong,
+                    index=0 if len(danh_sach_ten_moi_truong) > 0 else None,
+                    help="Chọn môi trường con từ danh sách"
+                )
+                
+                # Lấy mã số từ tên môi trường đã chọn
+                ma_so_moi_truong_con = dict_ten_to_ma.get(moi_truong_con, None)
+                
+                st.markdown("---")
+                st.markdown("#### 👨‍🌾 Thông tin túi mẹ")
+                
+                so_tui_me = st.number_input(
+                    "Số túi mẹ *",
+                    min_value=1,
+                    value=1,
+                    step=1
+                )
+                
+                so_cum_tui_me = st.number_input(
+                    "Số cụm/túi mẹ *",
+                    min_value=1,
+                    value=1,
+                    step=1
+                )
+                
+                st.markdown("---")
+                st.markdown("#### 🌱 Thông tin túi con")
+                
+                so_tui_con = st.number_input(
+                    "Số túi con *",
+                    min_value=1,
+                    value=1,
+                    step=1
+                )
+                
+                so_cum_tui_con = st.number_input(
+                    "Số cụm/túi con *",
+                    min_value=1,
+                    value=1,
+                    step=1
+                )
                 
                 st.markdown("---")
                 
