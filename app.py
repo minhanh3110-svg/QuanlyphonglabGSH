@@ -2966,47 +2966,64 @@ else:
                 GROUP BY nkc.ma_so_moi_truong_con, dmt.ten_moi_truong
             ''', conn)
             
-            # Query tồn kho hiện tại
-            df_ton = pd.read_sql_query('''
+            # Query tồn kho từ database (để tham chiếu)
+            df_ton_db = pd.read_sql_query('''
                 SELECT 
                     ma_so_moi_truong,
                     ten_moi_truong,
-                    SUM(so_luong_con_lai) AS tong_ton
+                    SUM(so_luong_con_lai) AS tong_ton_db
                 FROM kho_moi_truong
                 GROUP BY ma_so_moi_truong, ten_moi_truong
             ''', conn)
             
-            # Merge 3 dataframes
+            # Merge 2 dataframes trước
             df_tong_hop = df_nhap.merge(df_xuat, on=['ma_so_moi_truong', 'ten_moi_truong'], how='left')
-            df_tong_hop = df_tong_hop.merge(df_ton, on=['ma_so_moi_truong', 'ten_moi_truong'], how='left')
             
-            # Fill NaN
+            # Fill NaN cho tổng xuất
             df_tong_hop['tong_xuat'] = df_tong_hop['tong_xuat'].fillna(0).astype(int)
             df_tong_hop['so_lan_xuat'] = df_tong_hop['so_lan_xuat'].fillna(0).astype(int)
-            df_tong_hop['tong_ton'] = df_tong_hop['tong_ton'].fillna(0).astype(int)
             
-            # Tính chênh lệch (để kiểm tra đối chiếu)
-            df_tong_hop['chenh_lech'] = df_tong_hop['tong_nhap'] - df_tong_hop['tong_xuat'] - df_tong_hop['tong_ton']
+            # TÍNH TỒN KHO = NHẬP - XUẤT (công thức đúng)
+            df_tong_hop['tong_ton'] = df_tong_hop['tong_nhap'] - df_tong_hop['tong_xuat']
+            
+            # Merge với tồn kho DB để đối chiếu
+            df_tong_hop = df_tong_hop.merge(df_ton_db, on=['ma_so_moi_truong', 'ten_moi_truong'], how='left')
+            df_tong_hop['tong_ton_db'] = df_tong_hop['tong_ton_db'].fillna(0).astype(int)
+            
+            # Tính chênh lệch: So sánh tồn kho tính toán vs tồn kho trong DB
+            df_tong_hop['chenh_lech'] = df_tong_hop['tong_ton'] - df_tong_hop['tong_ton_db']
             
             # Rename columns
             df_tong_hop = df_tong_hop.rename(columns={
                 'ten_moi_truong': 'Loại môi trường',
                 'tong_nhap': 'Tổng nhập kho',
                 'tong_xuat': 'Tổng xuất (đã dùng)',
-                'tong_ton': 'Tồn kho hiện tại',
+                'tong_ton': 'Tồn kho (Tính toán)',
+                'tong_ton_db': 'Tồn kho (Database)',
                 'so_lan_xuat': 'Số lần xuất',
                 'chenh_lech': 'Chênh lệch'
             })
             
             # Hiển thị bảng với highlight
             def highlight_chenh_lech(row):
-                if row['Chênh lệch'] != 0:
+                if abs(row['Chênh lệch']) > 0:
                     return ['background-color: #fff3cd'] * len(row)
                 return [''] * len(row)
             
             if len(df_tong_hop) > 0:
-                styled_df = df_tong_hop[['Loại môi trường', 'Tổng nhập kho', 'Tổng xuất (đã dùng)', 'Tồn kho hiện tại', 'Số lần xuất', 'Chênh lệch']].style.apply(highlight_chenh_lech, axis=1)
+                styled_df = df_tong_hop[['Loại môi trường', 'Tổng nhập kho', 'Tổng xuất (đã dùng)', 'Tồn kho (Tính toán)', 'Tồn kho (Database)', 'Số lần xuất', 'Chênh lệch']].style.apply(highlight_chenh_lech, axis=1)
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                
+                # Thông tin
+                st.info("""
+                📊 **Công thức:**
+                - **Tồn kho (Tính toán)** = Tổng nhập kho - Tổng xuất (đã dùng)
+                - **Tồn kho (Database)** = Số lượng còn lại trong từng lô kho
+                - **Chênh lệch** = Tồn kho (Tính toán) - Tồn kho (Database)
+                
+                ✅ **Chênh lệch = 0**: Hệ thống khấu trừ chính xác
+                ⚠️ **Chênh lệch ≠ 0**: Có sai lệch giữa lý thuyết và thực tế
+                """)
                 
                 # Cảnh báo nếu có chênh lệch
                 df_chenh_lech = df_tong_hop[df_tong_hop['Chênh lệch'] != 0]
