@@ -1684,6 +1684,171 @@ else:
                             mime="application/pdf",
                             use_container_width=True
                         )
+        
+        # ========== HIỂN THỊ NHẬT KÝ ĐÃ NHẬP HÔM NAY ==========
+        st.markdown("---")
+        st.markdown("---")
+        st.header("📋 Nhật ký đã nhập hôm nay")
+        
+        conn = sqlite3.connect('data.db')
+        
+        # Query nhật ký hôm nay của nhân viên (hoặc tất cả nếu admin)
+        if is_admin:
+            df_today = pd.read_sql_query('''
+                SELECT 
+                    id, ngay_cay, nhan_vien, ten_giong, chu_ky, tinh_trang,
+                    so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
+                    tong_so_cay_con, gio_bat_dau, gio_ket_thuc, tong_gio_lam,
+                    nang_suat, ghi_chu, box_cay,
+                    ma_so_moi_truong_me, ma_so_moi_truong_con
+                FROM nhat_ky_cay
+                WHERE DATE(ngay_cay) = DATE('now')
+                ORDER BY ngay_tao DESC
+                LIMIT 20
+            ''', conn)
+        else:
+            df_today = pd.read_sql_query('''
+                SELECT 
+                    id, ngay_cay, nhan_vien, ten_giong, chu_ky, tinh_trang,
+                    so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
+                    tong_so_cay_con, gio_bat_dau, gio_ket_thuc, tong_gio_lam,
+                    nang_suat, ghi_chu, box_cay,
+                    ma_so_moi_truong_me, ma_so_moi_truong_con
+                FROM nhat_ky_cay
+                WHERE DATE(ngay_cay) = DATE('now')
+                  AND ma_nhan_vien = ?
+                ORDER BY ngay_tao DESC
+                LIMIT 20
+            ''', conn, params=(user_info['ma_nhan_vien'],))
+        
+        conn.close()
+        
+        if len(df_today) > 0:
+            st.info(f"📊 Hiển thị **{len(df_today)}** bản ghi gần nhất hôm nay")
+            
+            # Hiển thị từng bản ghi với form chỉnh sửa
+            for idx, row in df_today.iterrows():
+                with st.expander(f"🌱 Lô #{row['id']} - {row['ten_giong']} - {row['nhan_vien']} - {row['gio_bat_dau']}"):
+                    # Hiển thị thông tin hiện tại
+                    col_info, col_action = st.columns([3, 1])
+                    
+                    with col_info:
+                        st.markdown(f"""
+                        **Thông tin cơ bản:**
+                        - 🌿 **Giống**: {row['ten_giong']} | **Chu kỳ**: {row['chu_ky']} | **Tình trạng**: {row['tinh_trang']}
+                        - 📦 **Box**: {row['box_cay']} | **Giờ**: {row['gio_bat_dau']} - {row['gio_ket_thuc']} ({row['tong_gio_lam']:.2f}h)
+                        - 👨‍🌾 **Túi mẹ**: {row['so_tui_me']} x {row['so_cum_tui_me']} cụm
+                        - 🌱 **Túi con**: {row['so_tui_con']} x {row['so_cum_tui_con']} cụm = **{row['tong_so_cay_con']} cây**
+                        - 📈 **Năng suất**: {row['nang_suat']:.2f} cây/giờ
+                        - 📝 **Ghi chú**: {row['ghi_chu'] if row['ghi_chu'] else '_Không có_'}
+                        """)
+                    
+                    with col_action:
+                        if st.button("✏️ Sửa", key=f"edit_{row['id']}", use_container_width=True):
+                            st.session_state[f'editing_{row["id"]}'] = True
+                            st.rerun()
+                    
+                    # Form chỉnh sửa (chỉ hiển thị khi click "Sửa")
+                    if st.session_state.get(f'editing_{row["id"]}', False):
+                        st.markdown("---")
+                        st.markdown("### ✏️ Chỉnh sửa thông tin")
+                        
+                        with st.form(f"form_edit_{row['id']}"):
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                edit_ten_giong = st.selectbox(
+                                    "Tên giống",
+                                    options=danh_sach_ten_giong,
+                                    index=danh_sach_ten_giong.index(row['ten_giong']) if row['ten_giong'] in danh_sach_ten_giong else 0,
+                                    key=f"edit_giong_{row['id']}"
+                                )
+                                
+                                edit_chu_ky = st.selectbox(
+                                    "Chu kỳ",
+                                    options=danh_sach_chu_ky,
+                                    index=danh_sach_chu_ky.index(row['chu_ky']) if row['chu_ky'] in danh_sach_chu_ky else 0,
+                                    key=f"edit_chu_ky_{row['id']}"
+                                )
+                                
+                                edit_tinh_trang = st.selectbox(
+                                    "Tình trạng",
+                                    options=danh_sach_tinh_trang,
+                                    index=danh_sach_tinh_trang.index(row['tinh_trang']) if row['tinh_trang'] in danh_sach_tinh_trang else 0,
+                                    key=f"edit_tinh_trang_{row['id']}"
+                                )
+                            
+                            with col2:
+                                edit_so_tui_con = st.number_input(
+                                    "Số túi con",
+                                    min_value=1,
+                                    value=int(row['so_tui_con']),
+                                    key=f"edit_tui_con_{row['id']}"
+                                )
+                                
+                                edit_so_cum_tui_con = st.number_input(
+                                    "Số cụm/túi con",
+                                    min_value=1,
+                                    value=int(row['so_cum_tui_con']),
+                                    key=f"edit_cum_con_{row['id']}"
+                                )
+                                
+                                edit_ghi_chu = st.text_area(
+                                    "Ghi chú",
+                                    value=row['ghi_chu'] if row['ghi_chu'] else "",
+                                    key=f"edit_ghi_chu_{row['id']}",
+                                    height=80
+                                )
+                            
+                            col_submit, col_cancel = st.columns(2)
+                            
+                            with col_submit:
+                                submitted_edit = st.form_submit_button("💾 Lưu thay đổi", use_container_width=True, type="primary")
+                            
+                            with col_cancel:
+                                cancelled = st.form_submit_button("❌ Hủy", use_container_width=True)
+                            
+                            if submitted_edit:
+                                # Tính lại giá trị
+                                edit_tong_cay = edit_so_tui_con * edit_so_cum_tui_con
+                                edit_nang_suat = edit_tong_cay / row['tong_gio_lam'] if row['tong_gio_lam'] > 0 else 0
+                                
+                                # Cập nhật database
+                                conn = sqlite3.connect('data.db')
+                                c = conn.cursor()
+                                c.execute('''
+                                    UPDATE nhat_ky_cay
+                                    SET ten_giong = ?, chu_ky = ?, tinh_trang = ?,
+                                        so_tui_con = ?, so_cum_tui_con = ?,
+                                        tong_so_cay_con = ?, nang_suat = ?, ghi_chu = ?
+                                    WHERE id = ?
+                                ''', (
+                                    edit_ten_giong, edit_chu_ky, edit_tinh_trang,
+                                    edit_so_tui_con, edit_so_cum_tui_con,
+                                    edit_tong_cay, edit_nang_suat, edit_ghi_chu,
+                                    row['id']
+                                ))
+                                
+                                # Cập nhật phòng sáng tương ứng
+                                c.execute('''
+                                    UPDATE quan_ly_phong_sang
+                                    SET ten_giong = ?, chu_ky = ?
+                                    WHERE id_nhat_ky_cay = ?
+                                ''', (edit_ten_giong, edit_chu_ky, row['id']))
+                                
+                                conn.commit()
+                                conn.close()
+                                
+                                # Xóa trạng thái editing
+                                st.session_state[f'editing_{row["id"]}'] = False
+                                st.success("✅ Đã cập nhật thành công!")
+                                st.rerun()
+                            
+                            if cancelled:
+                                st.session_state[f'editing_{row["id"]}'] = False
+                                st.rerun()
+        else:
+            st.info("ℹ️ Chưa có nhật ký nào hôm nay. Hãy bắt đầu nhập liệu!")
     
     # ========== TRANG IN TEM NHÃN ==========
     elif menu == "In tem nhãn":
