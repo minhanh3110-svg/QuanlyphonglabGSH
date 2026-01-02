@@ -1310,44 +1310,6 @@ else:
                 )
                 
                 st.markdown("---")
-                st.markdown("#### 👨‍🌾 Thông tin túi mẹ")
-                
-                so_tui_me = st.number_input(
-                    "Số túi mẹ *",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="Số lượng túi mẹ"
-                )
-                
-                so_cum_tui_me = st.number_input(
-                    "Số cụm/túi mẹ *",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="Số cụm trên mỗi túi mẹ"
-                )
-                
-                st.markdown("---")
-                st.markdown("#### 🌱 Thông tin túi con")
-                
-                so_tui_con = st.number_input(
-                    "Số túi con *",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="Số lượng túi con"
-                )
-                
-                so_cum_tui_con = st.number_input(
-                    "Số cụm/túi con *",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="Số cụm trên mỗi túi con"
-                )
-                
-                st.markdown("---")
                 st.markdown("#### 📝 Ghi chú & Giàn cây")
                 
                 ghi_chu = st.text_area(
@@ -1474,14 +1436,16 @@ else:
                     "Số túi mẹ *",
                     min_value=1,
                     value=1,
-                    step=1
+                    step=1,
+                    help="Số lượng túi mẹ sử dụng"
                 )
                 
                 so_cum_tui_me = st.number_input(
                     "Số cụm/túi mẹ *",
                     min_value=1,
                     value=1,
-                    step=1
+                    step=1,
+                    help="Số cụm trên mỗi túi mẹ"
                 )
                 
                 st.markdown("---")
@@ -1491,23 +1455,25 @@ else:
                     "Số túi con *",
                     min_value=1,
                     value=1,
-                    step=1
+                    step=1,
+                    help="Số lượng túi con đã cấy"
                 )
                 
                 so_cum_tui_con = st.number_input(
                     "Số cụm/túi con *",
                     min_value=1,
                     value=1,
-                    step=1
+                    step=1,
+                    help="Số cụm trên mỗi túi con"
                 )
                 
                 st.markdown("---")
-                
                 st.markdown("#### 📝 Ghi chú")
                 ghi_chu = st.text_area(
                     "Ghi chú",
                     placeholder="Nhập ghi chú nếu có...",
-                    height=100
+                    height=100,
+                    help="Thông tin bổ sung"
                 )
                 
                 # Tính toán năng suất
