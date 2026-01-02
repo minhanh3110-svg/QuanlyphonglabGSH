@@ -1009,6 +1009,71 @@ def get_ten_moi_truong(ma_so):
     conn.close()
     return result[0] if result else f"Mã {ma_so}"
 
+# ========== DANH MỤC TÌNH TRẠNG VỚI MÃ ==========
+
+def get_danh_muc_tinh_trang():
+    """
+    Trả về danh mục tình trạng với mã số
+    Mã cuối 3: Sạch
+    Mã cuối 5: Khuẩn (có thể theo dõi/cấy lại)
+    Mã cuối 9: Nấm/Khuẩn nặng (Hủy bỏ)
+    
+    Returns: dict {mã: tên}
+    """
+    return {
+        103: "Sạch",
+        105: "Khuẩn nhẹ",
+        205: "Khuẩn môi trường",
+        305: "Khuẩn khác",
+        109: "Khuẩn nặng",
+        209: "Nấm",
+        309: "Hủy hoàn toàn"
+    }
+
+def get_ten_tinh_trang(ma_tinh_trang):
+    """Lấy tên tình trạng từ mã"""
+    danh_muc = get_danh_muc_tinh_trang()
+    return danh_muc.get(ma_tinh_trang, f"Mã {ma_tinh_trang}")
+
+def get_ma_tinh_trang(ten_tinh_trang):
+    """Lấy mã tình trạng từ tên"""
+    danh_muc = get_danh_muc_tinh_trang()
+    # Đảo ngược dict
+    reverse_dict = {v: k for k, v in danh_muc.items()}
+    return reverse_dict.get(ten_tinh_trang, None)
+
+def phan_loai_tinh_trang(ma_tinh_trang):
+    """
+    Phân loại tình trạng theo mã cuối
+    Returns: ('sach' | 'khuan' | 'huy', color, icon)
+    """
+    if ma_tinh_trang is None:
+        return 'unknown', '#808080', '❓'
+    
+    ma_cuoi = ma_tinh_trang % 10
+    
+    if ma_cuoi == 3:
+        # Sạch
+        return 'sach', '#28a745', '✅'
+    elif ma_cuoi == 5:
+        # Khuẩn - có thể theo dõi
+        return 'khuan', '#ff8c00', '⚠️'
+    elif ma_cuoi == 9:
+        # Nấm/Hủy - thất thoát
+        return 'huy', '#8b0000', '🔴'
+    else:
+        return 'unknown', '#808080', '❓'
+
+def get_mau_sac_tinh_trang(ma_tinh_trang):
+    """Lấy màu sắc theo tình trạng"""
+    loai, color, icon = phan_loai_tinh_trang(ma_tinh_trang)
+    return color
+
+def get_icon_tinh_trang(ma_tinh_trang):
+    """Lấy icon theo tình trạng"""
+    loai, color, icon = phan_loai_tinh_trang(ma_tinh_trang)
+    return icon
+
 # ========== FUNCTIONS CHO QUẢN LÝ MÔ SOI ==========
 
 def tao_ma_lo_mo_soi():
@@ -1772,7 +1837,10 @@ else:
         danh_sach_ten_giong = get_danh_sach_ten_giong()
         danh_sach_chu_ky = get_danh_sach_chu_ky()
         danh_sach_moi_truong = get_danh_sach_moi_truong()  # Dict: mã số -> tên
-        danh_sach_tinh_trang = ["Sạch", "Khuẩn nhẹ", "Khuẩn nặng", "Nấm", "Khuẩn môi trường", "Khác"]
+        
+        # Danh mục tình trạng với mã
+        dict_tinh_trang = get_danh_muc_tinh_trang()
+        danh_sach_tinh_trang = list(dict_tinh_trang.values())  # Danh sách tên để hiển thị
         
         if len(danh_sach_ten_giong) == 0 or len(danh_sach_chu_ky) == 0 or len(danh_sach_moi_truong) == 0:
             st.warning("⚠️ Vui lòng cập nhật danh mục ở trang 'Quản lý danh mục' trước khi nhập liệu.")
@@ -1809,12 +1877,50 @@ else:
                     help="Chọn chu kỳ cấy"
                 )
                 
-                tinh_trang = st.selectbox(
+                # Tạo format hiển thị cho tình trạng
+                tinh_trang_options = {}
+                for ma, ten in dict_tinh_trang.items():
+                    loai, color, icon = phan_loai_tinh_trang(ma)
+                    if loai == 'sach':
+                        label = f"{icon} {ten} (Mã {ma})"
+                    elif loai == 'khuan':
+                        label = f"{icon} {ten} (Mã {ma}) - Theo dõi"
+                    else:  # huy
+                        label = f"{icon} {ten} (Mã {ma}) - Hủy bỏ"
+                    tinh_trang_options[label] = ten
+                
+                tinh_trang_selected = st.selectbox(
                     "Tình trạng *",
-                    options=danh_sach_tinh_trang,
+                    options=list(tinh_trang_options.keys()),
                     index=0,
-                    help="Chọn tình trạng cây"
+                    help="Chọn tình trạng cây. Mã cuối 3: Sạch | Mã cuối 5: Khuẩn (theo dõi) | Mã cuối 9: Hủy bỏ"
                 )
+                tinh_trang = tinh_trang_options[tinh_trang_selected]
+                
+                # Hiển thị thông tin theo loại
+                ma_tinh_trang_hien_tai = get_ma_tinh_trang(tinh_trang)
+                loai, color, icon = phan_loai_tinh_trang(ma_tinh_trang_hien_tai)
+                
+                if loai == 'khuan':
+                    st.warning(f"""
+                    ⚠️ **CẢNH BÁO KHUẨN**
+                    
+                    Lô này có mã cuối **5** - Nhiễm khuẩn nhẹ
+                    - Vẫn lưu trong Phòng Sáng
+                    - Có thể sử dụng làm Mô Mẹ nhưng **cần theo dõi**
+                    - Ưu tiên xử lý trước khi lây lan
+                    """)
+                elif loai == 'huy':
+                    st.error(f"""
+                    🔴 **HỦY BỎ**
+                    
+                    Lô này có mã cuối **9** - Nấm/Khuẩn nặng
+                    - Sẽ bị **TRỪ THẲNG** khỏi kho Phòng Sáng
+                    - Tính vào tỷ lệ **THẤT THOÁT**
+                    - **KHÔNG** được dùng làm Mô Mẹ
+                    """)
+                elif loai == 'sach':
+                    st.success(f"✅ Lô sạch (Mã cuối **3**) - Chất lượng tốt")
                 
                 box_cay = st.number_input(
                     "Box cấy *",
@@ -2160,16 +2266,36 @@ else:
                         tuan_xuat, ngay_xuat = tinh_tuan_xuat_cay(ngay_cay, chu_ky)
                         
                         # Tự động tạo bản ghi trong phòng sáng
+                        # Phân loại theo mã tình trạng
+                        ma_tinh_trang_luu = get_ma_tinh_trang(tinh_trang)
+                        loai_tinh_trang, mau_sac, icon = phan_loai_tinh_trang(ma_tinh_trang_luu)
+                        
                         # Khởi tạo số túi dựa trên tình trạng ban đầu
                         so_tui_sach = so_tui_con if tinh_trang == "Sạch" else 0
                         so_tui_khuan_nhe = so_tui_con if tinh_trang == "Khuẩn nhẹ" else 0
                         so_tui_khuan_nang = so_tui_con if tinh_trang == "Khuẩn nặng" else 0
                         so_tui_nam = so_tui_con if tinh_trang == "Nấm" else 0
                         so_tui_khuan_moi_truong = so_tui_con if tinh_trang == "Khuẩn môi trường" else 0
-                        so_tui_khac = so_tui_con if tinh_trang == "Khác" else 0
+                        so_tui_khac = so_tui_con if tinh_trang in ["Khuẩn khác", "Hủy hoàn toàn"] else 0
                         
-                        tong_so_tui = so_tui_con
-                        tong_so_cay = so_tui_sach * so_cum_tui_con  # Chỉ tính cây sạch
+                        # LOGIC MÃ 9: HỦY BỎ - KHÔNG LƯU VÀO PHÒNG SÁNG
+                        if loai_tinh_trang == 'huy':
+                            # Mã cuối 9: Hủy bỏ, không tạo bản ghi phòng sáng
+                            tong_so_tui = 0  # Trừ thẳng khỏi kho
+                            tong_so_cay = 0
+                            trang_thai_phong_sang = "Đã hủy"
+                            ghi_chu_them = f"[HỦY BỎ - Mã {ma_tinh_trang_luu}] " + (ghi_chu if ghi_chu else "")
+                        else:
+                            # Mã cuối 3 (sạch) hoặc 5 (khuẩn - theo dõi): Lưu vào phòng sáng bình thường
+                            tong_so_tui = so_tui_con
+                            tong_so_cay = so_tui_sach * so_cum_tui_con  # Chỉ tính cây sạch
+                            
+                            if loai_tinh_trang == 'khuan':
+                                trang_thai_phong_sang = "Đang nuôi - Theo dõi khuẩn"
+                                ghi_chu_them = f"[CẢNH BÁO MÃ {ma_tinh_trang_luu} - Khuẩn nhẹ] " + (ghi_chu if ghi_chu else "")
+                            else:
+                                trang_thai_phong_sang = "Đang nuôi"
+                                ghi_chu_them = ghi_chu
                         
                         c.execute('''
                             INSERT INTO quan_ly_phong_sang (
@@ -2183,11 +2309,11 @@ else:
                         ''', (
                             id_nhat_ky, ngay_cay.strftime("%Y-%m-%d"),
                             user_info['ten_nhan_vien'], user_info['ma_nhan_vien'],
-                            ten_giong, chu_ky, so_gian_ke_value, "Đang nuôi",
+                            ten_giong, chu_ky, so_gian_ke_value, trang_thai_phong_sang,
                             so_tui_sach, so_tui_khuan_nhe, so_tui_khuan_nang, so_tui_nam,
                             so_tui_khuan_moi_truong, so_tui_khac,
                             tong_so_tui, tong_so_cay, tuan_xuat, ngay_xuat,
-                            ghi_chu, ngay_tao, ngay_tao
+                            ghi_chu_them, ngay_tao, ngay_tao
                         ))
                         
                         conn.commit()
@@ -2210,14 +2336,44 @@ else:
                         
                         conn.close()
                         
-                        # Hiển thị thông tin khấu trừ
-                        st.success(f"""
-                        ✅ **LƯU DỮ LIỆU THÀNH CÔNG!**
-                        
-                        📋 Đã tự động tạo bản ghi trong phòng sáng
-                        🔬 Đã khấu trừ {so_cum_mo_me_can_dung} cụm từ lô Mô Soi **{ma_lo_mo_soi}**
-                        📊 Lô Mô Soi còn lại: **{so_cum_con_lai_sau_khau_tru} cụm**
-                        """)
+                        # Hiển thị thông tin khấu trừ theo loại tình trạng
+                        if loai_tinh_trang == 'huy':
+                            st.error(f"""
+                            🔴 **ĐÃ LƯU - LÔ BỊ HỦY BỎ!**
+                            
+                            ⚠️ **Lô này có Mã {ma_tinh_trang_luu} (mã cuối 9) - {tinh_trang}**
+                            
+                            📋 Trạng thái: **Đã hủy**
+                            ❌ **KHÔNG** lưu vào kho Phòng Sáng (trừ thẳng)
+                            📊 Tính vào tỷ lệ **THẤT THOÁT**
+                            🔬 Đã khấu trừ {so_cum_mo_me_can_dung} cụm từ lô Mô Soi **{ma_lo_mo_soi}**
+                            📊 Lô Mô Soi còn lại: **{so_cum_con_lai_sau_khau_tru} cụm**
+                            
+                            💡 **Lưu ý:** Cần kiểm tra nguyên nhân nhiễm để cải thiện quy trình
+                            """)
+                        elif loai_tinh_trang == 'khuan':
+                            st.warning(f"""
+                            ⚠️ **ĐÃ LƯU - LÔ CẦN THEO DÕI!**
+                            
+                            📋 **Lô này có Mã {ma_tinh_trang_luu} (mã cuối 5) - {tinh_trang}**
+                            
+                            📦 Đã lưu vào Phòng Sáng với trạng thái: **Theo dõi khuẩn**
+                            ✅ Có thể sử dụng làm Mô Mẹ nhưng **cần kiểm tra kỹ**
+                            🔬 Đã khấu trừ {so_cum_mo_me_can_dung} cụm từ lô Mô Soi **{ma_lo_mo_soi}**
+                            📊 Lô Mô Soi còn lại: **{so_cum_con_lai_sau_khau_tru} cụm**
+                            
+                            💡 **Khuyến nghị:** Ưu tiên xử lý trước khi lây lan
+                            """)
+                        else:  # sach
+                            st.success(f"""
+                            ✅ **LƯU DỮ LIỆU THÀNH CÔNG!**
+                            
+                            📋 **Lô sạch - Mã {ma_tinh_trang_luu} (mã cuối 3)**
+                            
+                            📦 Đã tự động tạo bản ghi trong phòng sáng
+                            🔬 Đã khấu trừ {so_cum_mo_me_can_dung} cụm từ lô Mô Soi **{ma_lo_mo_soi}**
+                            📊 Lô Mô Soi còn lại: **{so_cum_con_lai_sau_khau_tru} cụm**
+                            """)
                         
                         # Chi tiết môi trường đã xuất
                         with st.expander("📦 Chi tiết xuất môi trường từ kho (FIFO)"):
