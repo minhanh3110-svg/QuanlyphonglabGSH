@@ -900,6 +900,65 @@ def khau_tru_moi_truong_tu_kho(ma_so_moi_truong, so_luong_can_dung):
     message = f"✅ Đã khấu trừ {so_luong_can_dung} túi từ {len(danh_sach_lo_su_dung)} lô"
     return True, message, danh_sach_lo_su_dung
 
+def kiem_tra_moi_truong_qua_han():
+    """
+    Kiểm tra các lô môi trường quá hạn (>= 30 ngày)
+    Returns: (so_lo_qua_han: int, danh_sach_lo: list)
+    """
+    conn = sqlite3.connect('data.db')
+    
+    df = pd.read_sql_query('''
+        SELECT 
+            ma_lo,
+            ten_moi_truong,
+            ngay_do,
+            so_luong_con_lai,
+            vi_tri_kho,
+            nguoi_do,
+            CAST((julianday('now') - julianday(ngay_do)) AS INTEGER) AS tuoi_ngay
+        FROM kho_moi_truong
+        WHERE so_luong_con_lai > 0
+          AND tuoi_ngay >= 30
+        ORDER BY tuoi_ngay DESC
+    ''', conn)
+    
+    conn.close()
+    
+    return len(df), df.to_dict('records') if len(df) > 0 else []
+
+def cap_nhat_trang_thai_lo_moi_truong(ma_lo, trang_thai):
+    """
+    Cập nhật trạng thái lô môi trường (đã xử lý hoặc hủy)
+    trang_thai: 'da_xu_ly' hoặc 'huy_bo'
+    """
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    
+    if trang_thai == 'huy_bo':
+        # Set số lượng còn lại = 0
+        c.execute('''
+            UPDATE kho_moi_truong
+            SET so_luong_con_lai = 0,
+                ghi_chu = CASE 
+                    WHEN ghi_chu IS NULL THEN '[HỦY BỎ: Quá hạn 30 ngày]'
+                    ELSE ghi_chu || ' [HỦY BỎ: Quá hạn 30 ngày]'
+                END
+            WHERE ma_lo = ?
+        ''', (ma_lo,))
+    elif trang_thai == 'da_xu_ly':
+        # Thêm ghi chú đã kiểm tra
+        c.execute('''
+            UPDATE kho_moi_truong
+            SET ghi_chu = CASE 
+                    WHEN ghi_chu IS NULL THEN '[ĐÃ KIỂM TRA: Vẫn sử dụng được]'
+                    ELSE ghi_chu || ' [ĐÃ KIỂM TRA: Vẫn sử dụng được]'
+                END
+            WHERE ma_lo = ?
+        ''', (ma_lo,))
+    
+    conn.commit()
+    conn.close()
+
 def get_danh_sach_moi_truong():
     """Lấy danh sách môi trường từ database (trả về dict: mã số -> tên)"""
     conn = sqlite3.connect('data.db')
@@ -1381,6 +1440,44 @@ else:
     
     st.sidebar.markdown("---")
     
+    # ========== THÔNG BÁO THÔNG MINH CHO ADMIN ==========
+    if is_admin:
+        so_lo_qua_han, danh_sach_qua_han = kiem_tra_moi_truong_qua_han()
+        
+        if so_lo_qua_han > 0:
+            # Hiển thị cảnh báo trong sidebar
+            st.sidebar.error(f"""
+            🚨 **CẢNH BÁO KHẨN CẤP**
+            
+            Có **{so_lo_qua_han} lô** môi trường 
+            đã quá 30 ngày!
+            
+            ⚠️ Vui lòng kiểm tra và xử lý ngay
+            """)
+            
+            # Nút quick access
+            if st.sidebar.button("🔍 Xem chi tiết & Xử lý", use_container_width=True, type="primary"):
+                st.session_state['show_urgent_tasks'] = True
+            
+            # Toast notification (hiện 1 lần khi load)
+            if 'toast_shown' not in st.session_state:
+                st.toast(f"🚨 CẢNH BÁO: {so_lo_qua_han} lô môi trường quá hạn!", icon="🚨")
+                st.session_state['toast_shown'] = True
+        else:
+            # Reset toast flag khi không còn cảnh báo
+            if 'toast_shown' in st.session_state:
+                del st.session_state['toast_shown']
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### ℹ️ Thông tin")
+    st.sidebar.info(
+        f"""
+        **Phiên bản:** 2.0
+        **Người dùng:** {user_info['ten_nhan_vien']}
+        **Quyền:** {'Quản trị viên' if is_admin else 'Nhân viên'}
+        """
+    )
+    
     # Menu
     if is_admin:
         menu = st.sidebar.selectbox(
@@ -1392,6 +1489,77 @@ else:
             "📋 Chọn chức năng",
             ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Quản lý Kho Môi trường"]
         )
+    
+    # ========== DASHBOARD VIỆC CẦN LÀM GẤP (ADMIN) ==========
+    if is_admin and st.session_state.get('show_urgent_tasks', False):
+        st.markdown("---")
+        st.markdown("# 🚨 VIỆC CẦN XỬ LÝ GẤP")
+        
+        so_lo_qua_han, danh_sach_qua_han = kiem_tra_moi_truong_qua_han()
+        
+        if so_lo_qua_han > 0:
+            st.error(f"""
+            ### ⚠️ CÓ {so_lo_qua_han} LÔ MÔI TRƯỜNG QUÁ HẠN (≥ 30 NGÀY)
+            
+            **Hành động cần thực hiện:**
+            - Kiểm tra chất lượng môi trường
+            - Quyết định: Tiếp tục sử dụng hoặc Hủy bỏ
+            - Cập nhật trạng thái để không hiện cảnh báo nữa
+            """)
+            
+            # Hiển thị từng lô với action buttons
+            for lo in danh_sach_qua_han:
+                with st.expander(f"🔴 {lo['ma_lo']} - {lo['ten_moi_truong']} ({lo['tuoi_ngay']} ngày)", expanded=True):
+                    col_info, col_action = st.columns([2, 1])
+                    
+                    with col_info:
+                        st.markdown(f"""
+                        **Thông tin lô:**
+                        - 📦 **Mã lô:** {lo['ma_lo']}
+                        - 🧪 **Loại:** {lo['ten_moi_truong']}
+                        - 📅 **Ngày đổ:** {lo['ngay_do']}
+                        - ⏰ **Tuổi:** {lo['tuoi_ngay']} ngày
+                        - 📊 **Còn lại:** {lo['so_luong_con_lai']} túi
+                        - 📍 **Vị trí:** {lo['vi_tri_kho']}
+                        - 👤 **Người đổ:** {lo['nguoi_do'] if lo['nguoi_do'] else 'N/A'}
+                        
+                        **⚠️ RỦI RO:**
+                        - Tỷ lệ nhiễm cao
+                        - Chất lượng môi trường giảm
+                        - Ảnh hưởng đến năng suất cấy
+                        """)
+                    
+                    with col_action:
+                        st.markdown("### Hành động:")
+                        
+                        if st.button("✅ Đã kiểm tra - Vẫn dùng được", 
+                                   key=f"keep_{lo['ma_lo']}", 
+                                   use_container_width=True,
+                                   type="secondary"):
+                            cap_nhat_trang_thai_lo_moi_truong(lo['ma_lo'], 'da_xu_ly')
+                            st.success("✅ Đã ghi nhận: Lô vẫn sử dụng được")
+                            st.rerun()
+                        
+                        if st.button("🗑️ HỦY BỎ lô này", 
+                                   key=f"delete_{lo['ma_lo']}", 
+                                   use_container_width=True,
+                                   type="primary"):
+                            cap_nhat_trang_thai_lo_moi_truong(lo['ma_lo'], 'huy_bo')
+                            st.success("✅ Đã hủy bỏ lô môi trường")
+                            st.rerun()
+            
+            # Nút đóng
+            st.markdown("---")
+            if st.button("✖️ Đóng danh sách việc cần làm", use_container_width=True):
+                st.session_state['show_urgent_tasks'] = False
+                st.rerun()
+        else:
+            st.success("✅ Không có lô môi trường nào cần xử lý gấp!")
+            if st.button("✖️ Đóng", use_container_width=True):
+                st.session_state['show_urgent_tasks'] = False
+                st.rerun()
+        
+        st.markdown("---")
     
     # ========== TRANG NHẬP LIỆU ==========
     if menu == "Nhập liệu":
