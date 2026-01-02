@@ -2935,15 +2935,245 @@ else:
             
             conn.close()
         
-        # ========== TAB 3: LỊCH SỬ XUẤT ==========
+        # ========== TAB 3: LỊCH SỬ XUẤT & ĐỐI CHIẾU ==========
         with tab_lich_su:
-            st.subheader("📜 Lịch sử Xuất môi trường")
-            st.info("🚧 Tính năng đang phát triển...")
-            st.markdown("""
-            Lịch sử xuất sẽ được tự động ghi nhận khi:
-            - Nhân viên cấy lưu nhật ký cấy
-            - Hệ thống tự động khấu trừ môi trường từ kho (FIFO)
-            """)
+            st.subheader("📜 Lịch sử Xuất môi trường & Đối chiếu")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # ========== PHẦN 1: TỔNG HỢP NHẬP - XUẤT - TỒN ==========
+            st.markdown("#### 📊 Tổng hợp Nhập - Xuất - Tồn kho")
+            
+            # Query tổng nhập kho theo loại
+            df_nhap = pd.read_sql_query('''
+                SELECT 
+                    ma_so_moi_truong,
+                    ten_moi_truong,
+                    SUM(so_luong_ban_dau) AS tong_nhap
+                FROM kho_moi_truong
+                GROUP BY ma_so_moi_truong, ten_moi_truong
+            ''', conn)
+            
+            # Query tổng xuất (từ nhật ký cấy - số túi con sử dụng)
+            df_xuat = pd.read_sql_query('''
+                SELECT 
+                    nkc.ma_so_moi_truong_con AS ma_so_moi_truong,
+                    dmt.ten_moi_truong,
+                    SUM(nkc.so_tui_con) AS tong_xuat,
+                    COUNT(nkc.id) AS so_lan_xuat
+                FROM nhat_ky_cay nkc
+                JOIN danh_muc_moi_truong dmt ON nkc.ma_so_moi_truong_con = dmt.ma_so
+                GROUP BY nkc.ma_so_moi_truong_con, dmt.ten_moi_truong
+            ''', conn)
+            
+            # Query tồn kho hiện tại
+            df_ton = pd.read_sql_query('''
+                SELECT 
+                    ma_so_moi_truong,
+                    ten_moi_truong,
+                    SUM(so_luong_con_lai) AS tong_ton
+                FROM kho_moi_truong
+                GROUP BY ma_so_moi_truong, ten_moi_truong
+            ''', conn)
+            
+            # Merge 3 dataframes
+            df_tong_hop = df_nhap.merge(df_xuat, on=['ma_so_moi_truong', 'ten_moi_truong'], how='left')
+            df_tong_hop = df_tong_hop.merge(df_ton, on=['ma_so_moi_truong', 'ten_moi_truong'], how='left')
+            
+            # Fill NaN
+            df_tong_hop['tong_xuat'] = df_tong_hop['tong_xuat'].fillna(0).astype(int)
+            df_tong_hop['so_lan_xuat'] = df_tong_hop['so_lan_xuat'].fillna(0).astype(int)
+            df_tong_hop['tong_ton'] = df_tong_hop['tong_ton'].fillna(0).astype(int)
+            
+            # Tính chênh lệch (để kiểm tra đối chiếu)
+            df_tong_hop['chenh_lech'] = df_tong_hop['tong_nhap'] - df_tong_hop['tong_xuat'] - df_tong_hop['tong_ton']
+            
+            # Rename columns
+            df_tong_hop = df_tong_hop.rename(columns={
+                'ten_moi_truong': 'Loại môi trường',
+                'tong_nhap': 'Tổng nhập kho',
+                'tong_xuat': 'Tổng xuất (đã dùng)',
+                'tong_ton': 'Tồn kho hiện tại',
+                'so_lan_xuat': 'Số lần xuất',
+                'chenh_lech': 'Chênh lệch'
+            })
+            
+            # Hiển thị bảng với highlight
+            def highlight_chenh_lech(row):
+                if row['Chênh lech'] != 0:
+                    return ['background-color: #fff3cd'] * len(row)
+                return [''] * len(row)
+            
+            if len(df_tong_hop) > 0:
+                styled_df = df_tong_hop[['Loại môi trường', 'Tổng nhập kho', 'Tổng xuất (đã dùng)', 'Tồn kho hiện tại', 'Số lần xuất', 'Chênh lệch']].style.apply(highlight_chenh_lech, axis=1)
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                
+                # Cảnh báo nếu có chênh lệch
+                df_chenh_lech = df_tong_hop[df_tong_hop['Chênh lệch'] != 0]
+                if len(df_chenh_lech) > 0:
+                    st.warning(f"⚠️ **Có {len(df_chenh_lech)} loại môi trường có chênh lệch!** Có thể do dữ liệu chưa đồng bộ hoặc có lô bị mất/hỏng chưa ghi nhận.")
+                else:
+                    st.success("✅ **Đối chiếu chính xác!** Nhập - Xuất - Tồn khớp 100%")
+            else:
+                st.info("ℹ️ Chưa có dữ liệu môi trường")
+            
+            st.markdown("---")
+            
+            # ========== PHẦN 2: LỊCH SỬ XUẤT CHI TIẾT ==========
+            st.markdown("#### 📋 Lịch sử Xuất chi tiết (Theo nhật ký cấy)")
+            
+            # Lọc theo loại môi trường
+            danh_sach_loc = ['Tất cả'] + df_tong_hop['Loại môi trường'].tolist()
+            loc_moi_truong = st.selectbox("Lọc theo loại môi trường:", options=danh_sach_loc, key="loc_lich_su")
+            
+            # Query lịch sử xuất
+            if loc_moi_truong == 'Tất cả':
+                query_lich_su = '''
+                    SELECT 
+                        nkc.ngay_cay AS "Ngày xuất",
+                        nkc.tuan AS "Tuần",
+                        dmt.ten_moi_truong AS "Loại môi trường",
+                        nkc.nhan_vien AS "Nhân viên sử dụng",
+                        nkc.ten_giong AS "Giống cây",
+                        nkc.so_tui_con AS "Số túi xuất",
+                        nkc.ghi_chu AS "Ghi chú"
+                    FROM nhat_ky_cay nkc
+                    JOIN danh_muc_moi_truong dmt ON nkc.ma_so_moi_truong_con = dmt.ma_so
+                    ORDER BY nkc.ngay_cay DESC, nkc.ngay_tao DESC
+                    LIMIT 500
+                '''
+                df_lich_su = pd.read_sql_query(query_lich_su, conn)
+            else:
+                # Lấy mã số từ tên
+                ma_so_loc = df_tong_hop[df_tong_hop['Loại môi trường'] == loc_moi_truong]['ma_so_moi_truong'].iloc[0]
+                query_lich_su = '''
+                    SELECT 
+                        nkc.ngay_cay AS "Ngày xuất",
+                        nkc.tuan AS "Tuần",
+                        dmt.ten_moi_truong AS "Loại môi trường",
+                        nkc.nhan_vien AS "Nhân viên sử dụng",
+                        nkc.ten_giong AS "Giống cây",
+                        nkc.so_tui_con AS "Số túi xuất",
+                        nkc.ghi_chu AS "Ghi chú"
+                    FROM nhat_ky_cay nkc
+                    JOIN danh_muc_moi_truong dmt ON nkc.ma_so_moi_truong_con = dmt.ma_so
+                    WHERE nkc.ma_so_moi_truong_con = ?
+                    ORDER BY nkc.ngay_cay DESC, nkc.ngay_tao DESC
+                    LIMIT 500
+                '''
+                df_lich_su = pd.read_sql_query(query_lich_su, conn, params=(ma_so_loc,))
+            
+            if len(df_lich_su) > 0:
+                st.info(f"📊 Hiển thị **{len(df_lich_su)}** lần xuất gần nhất")
+                st.dataframe(df_lich_su, use_container_width=True, hide_index=True)
+                
+                # Thống kê theo nhân viên
+                st.markdown("---")
+                st.markdown("#### 👥 Thống kê xuất theo Nhân viên")
+                
+                df_thong_ke_nv = df_lich_su.groupby('Nhân viên sử dụng').agg({
+                    'Số túi xuất': 'sum',
+                    'Ngày xuất': 'count'
+                }).reset_index()
+                df_thong_ke_nv.columns = ['Nhân viên', 'Tổng túi đã dùng', 'Số lần xuất']
+                df_thong_ke_nv = df_thong_ke_nv.sort_values('Tổng túi đã dùng', ascending=False)
+                
+                col_table, col_chart = st.columns([1, 2])
+                
+                with col_table:
+                    st.dataframe(df_thong_ke_nv, use_container_width=True, hide_index=True)
+                
+                with col_chart:
+                    fig = px.bar(
+                        df_thong_ke_nv,
+                        x='Nhân viên',
+                        y='Tổng túi đã dùng',
+                        title='Biểu đồ Sử dụng Môi trường theo Nhân viên',
+                        color='Tổng túi đã dùng',
+                        color_continuous_scale='Greens'
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("ℹ️ Chưa có lịch sử xuất môi trường. Hãy bắt đầu nhập liệu cấy!")
+            
+            st.markdown("---")
+            
+            # ========== PHẦN 3: CHI TIẾT TỒN KHO TỪNG LÔ ==========
+            st.markdown("#### 📦 Chi tiết Tồn kho từng Lô")
+            
+            df_lo = pd.read_sql_query('''
+                SELECT 
+                    ma_lo AS "Mã lô",
+                    ten_moi_truong AS "Loại",
+                    ngay_do AS "Ngày đổ",
+                    so_luong_ban_dau AS "Số lượng đổ",
+                    (so_luong_ban_dau - so_luong_con_lai) AS "Đã xuất",
+                    so_luong_con_lai AS "Còn lại",
+                    ROUND(CAST(so_luong_con_lai AS FLOAT) / so_luong_ban_dau * 100, 1) AS "% Còn",
+                    vi_tri_kho AS "Vị trí"
+                FROM kho_moi_truong
+                WHERE so_luong_ban_dau > 0
+                ORDER BY ten_moi_truong, ngay_do ASC
+            ''', conn)
+            
+            if len(df_lo) > 0:
+                # Highlight lô sắp hết
+                def highlight_lo(row):
+                    if row['Còn lại'] == 0:
+                        return ['background-color: #f8d7da'] * len(row)  # Đỏ nhạt - hết
+                    elif row['% Còn'] < 20:
+                        return ['background-color: #fff3cd'] * len(row)  # Vàng - sắp hết
+                    return [''] * len(row)
+                
+                styled_df_lo = df_lo.style.apply(highlight_lo, axis=1)
+                st.dataframe(styled_df_lo, use_container_width=True, hide_index=True)
+                
+                # Thống kê
+                so_lo_het = len(df_lo[df_lo['Còn lại'] == 0])
+                so_lo_sap_het = len(df_lo[(df_lo['Còn lại'] > 0) & (df_lo['% Còn'] < 20)])
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Tổng số lô", len(df_lo))
+                with col2:
+                    st.metric("Lô đã hết", so_lo_het, delta=None)
+                with col3:
+                    st.metric("Lô sắp hết (< 20%)", so_lo_sap_het, delta=None)
+                
+                if so_lo_het > 0:
+                    st.info(f"💡 **{so_lo_het} lô đã hết** (nền đỏ). Có thể xóa khỏi kho hoặc lưu lại để đối chiếu.")
+                if so_lo_sap_het > 0:
+                    st.warning(f"⚠️ **{so_lo_sap_het} lô sắp hết** (nền vàng). Cần đổ thêm môi trường!")
+            else:
+                st.info("ℹ️ Chưa có lô môi trường nào trong kho")
+            
+            conn.close()
+            
+            # Hướng dẫn
+            with st.expander("💡 Hướng dẫn đọc báo cáo"):
+                st.markdown("""
+                **Tổng hợp Nhập - Xuất - Tồn:**
+                - **Tổng nhập kho**: Tổng số túi môi trường đã đổ và nhập kho
+                - **Tổng xuất (đã dùng)**: Số túi đã sử dụng trong quá trình cấy
+                - **Tồn kho hiện tại**: Số túi còn lại trong kho
+                - **Chênh lệch**: Nếu = 0 → Đối chiếu chính xác. Nếu ≠ 0 → Cần kiểm tra
+                
+                **Lịch sử Xuất chi tiết:**
+                - Xem chi tiết từng lần xuất: Ngày, Nhân viên, Số lượng
+                - Lọc theo loại môi trường để xem chi tiết
+                - Thống kê theo nhân viên để biết ai dùng nhiều nhất
+                
+                **Chi tiết Tồn kho từng Lô:**
+                - 🔴 Nền đỏ: Lô đã hết
+                - 🟡 Nền vàng: Lô còn < 20% (sắp hết)
+                - ⚪ Không màu: Lô còn đủ
+                
+                **Lợi ích:**
+                - ✅ Đối chiếu chính xác nhập - xuất - tồn
+                - ✅ Phát hiện sai lệch, thất thoát
+                - ✅ Theo dõi hiệu quả sử dụng môi trường
+                - ✅ Dự báo nhu cầu đổ môi trường
+                """)
     
     # ========== TRANG QUẢN LÝ DANH MỤC (CHỈ ADMIN) ==========
     elif menu == "Quản lý danh mục" and is_admin:

@@ -1,0 +1,269 @@
+═══════════════════════════════════════════════════════════
+   📊 LỊCH SỬ XUẤT & ĐỐI CHIẾU KHO MÔI TRƯỜNG
+═══════════════════════════════════════════════════════════
+
+## ✅ TÍNH NĂNG MỚI
+
+Tab "📜 Lịch sử Xuất & Đối chiếu" trong "Quản lý Kho Môi trường"
+bao gồm 3 PHẦN CHÍNH:
+
+───────────────────────────────────────────────────────────
+
+## PHẦN 1: TỔNG HỢP NHẬP - XUẤT - TỒN
+
+### Cột dữ liệu:
+- **Loại môi trường**: Tên môi trường (VD: MS821)
+- **Tổng nhập kho**: Tổng số túi đã đổ và nhập kho
+- **Tổng xuất (đã dùng)**: Số túi đã sử dụng trong cấy
+- **Tồn kho hiện tại**: Số túi còn lại trong kho
+- **Số lần xuất**: Số lần sử dụng môi trường này
+- **Chênh lệch**: Tổng nhập - Tổng xuất - Tồn kho
+
+### Công thức đối chiếu:
+```
+Tổng nhập kho = Tổng xuất + Tồn kho + Chênh lệch
+
+✅ Nếu Chênh lệch = 0 → ĐỐI CHIẾU CHÍNH XÁC
+⚠️ Nếu Chênh lệch ≠ 0 → CẦN KIỂM TRA
+```
+
+### Ví dụ:
+```
+Môi trường MS821:
+- Tổng nhập: 500 túi
+- Đã xuất: 320 túi (từ nhật ký cấy)
+- Tồn kho: 180 túi (trong kho)
+- Chênh lệch: 500 - 320 - 180 = 0 ✅ KHỚP!
+
+Môi trường MS803:
+- Tổng nhập: 300 túi
+- Đã xuất: 150 túi
+- Tồn kho: 120 túi
+- Chênh lệch: 300 - 150 - 120 = 30 ⚠️ CHÊNH!
+  → Có thể: Lô bị hỏng chưa ghi nhận, hoặc dữ liệu sai
+```
+
+### Highlight:
+- 🟡 **Nền vàng**: Có chênh lệch → Cần kiểm tra
+- ⚪ **Không màu**: Đối chiếu chính xác
+
+───────────────────────────────────────────────────────────
+
+## PHẦN 2: LỊCH SỬ XUẤT CHI TIẾT
+
+### Dữ liệu hiển thị:
+- **Ngày xuất**: Ngày nhân viên cấy sử dụng
+- **Tuần**: Tuần trong năm
+- **Loại môi trường**: Tên môi trường đã dùng
+- **Nhân viên sử dụng**: Tên người cấy
+- **Giống cây**: Loại cây đã cấy
+- **Số túi xuất**: Số túi môi trường đã dùng
+- **Ghi chú**: Thông tin bổ sung
+
+### Tính năng:
+✅ Lọc theo loại môi trường
+✅ Hiển thị 500 lần xuất gần nhất
+✅ Sắp xếp từ mới → cũ
+
+### Thống kê theo Nhân viên:
+Hiển thị:
+- Tổng túi đã dùng
+- Số lần xuất
+- Biểu đồ cột so sánh giữa các nhân viên
+
+**Lợi ích:**
+- Biết nhân viên nào dùng môi trường nhiều nhất
+- Dự báo nhu cầu môi trường cho từng nhân viên
+- Phát hiện bất thường (nếu 1 NV dùng quá nhiều)
+
+───────────────────────────────────────────────────────────
+
+## PHẦN 3: CHI TIẾT TỒN KHO TỪNG LÔ
+
+### Cột dữ liệu:
+- **Mã lô**: VD: MT-20260102-001
+- **Loại**: Tên môi trường
+- **Ngày đổ**: Ngày đổ môi trường
+- **Số lượng đổ**: Tổng túi ban đầu
+- **Đã xuất**: Số túi đã sử dụng từ lô này
+- **Còn lại**: Số túi còn trong kho
+- **% Còn**: Tỷ lệ phần trăm còn lại
+- **Vị trí**: Vị trí kho lưu trữ
+
+### Highlight tự động:
+- 🔴 **Nền đỏ nhạt**: Lô đã hết (Còn lại = 0)
+- 🟡 **Nền vàng**: Lô sắp hết (% Còn < 20%)
+- ⚪ **Không màu**: Lô còn đủ
+
+### Metrics:
+- **Tổng số lô**: Số lô đang quản lý
+- **Lô đã hết**: Số lô còn 0 túi
+- **Lô sắp hết**: Số lô < 20% còn lại
+
+---
+
+**Lợi ích:**
+✅ Xem chi tiết từng lô đã xuất bao nhiêu
+✅ Biết lô nào sắp hết để đổ thêm
+✅ Xóa các lô đã hết để dọn kho
+
+───────────────────────────────────────────────────────────
+
+## 🎯 CÁCH SỬ DỤNG
+
+### Bước 1: Vào "Quản lý Kho Môi trường"
+```
+Menu → Quản lý Kho Môi trường → Tab "📜 Lịch sử Xuất"
+```
+
+### Bước 2: Xem Tổng hợp Nhập - Xuất - Tồn
+- Kiểm tra cột "Chênh lệch"
+- Nếu = 0 → ✅ OK
+- Nếu ≠ 0 → ⚠️ Cần kiểm tra lại
+
+### Bước 3: Xem Lịch sử Xuất
+- Chọn loại môi trường (hoặc "Tất cả")
+- Xem chi tiết từng lần xuất
+- Xem thống kê theo nhân viên
+
+### Bước 4: Kiểm tra Tồn kho từng Lô
+- Tìm lô nền đỏ (đã hết) → Có thể xóa
+- Tìm lô nền vàng (sắp hết) → Cần đổ thêm
+
+───────────────────────────────────────────────────────────
+
+## 💡 CASE STUDY
+
+### Case 1: Phát hiện thất thoát
+
+**Tình huống:**
+```
+Môi trường MS821:
+- Tổng nhập: 1000 túi
+- Đã xuất: 600 túi (theo nhật ký cấy)
+- Tồn kho: 350 túi (đếm thực tế)
+- Chênh lệch: 1000 - 600 - 350 = 50 túi ⚠️
+```
+
+**Nguyên nhân có thể:**
+1. 50 túi bị hỏng chưa ghi nhận
+2. Sai sót khi nhập liệu
+3. Thất thoát, mất mát
+4. Một số lô chưa cập nhật đúng
+
+**Giải pháp:**
+→ Kiểm tra lại từng lô trong "Chi tiết Tồn kho"
+→ Đối chiếu với sổ sách thực tế
+→ Ghi nhận lô hỏng (nếu có)
+
+---
+
+### Case 2: Dự báo nhu cầu
+
+**Dữ liệu:**
+```
+Thống kê xuất 1 tháng (MS821):
+- Tuần 1: 100 túi
+- Tuần 2: 120 túi
+- Tuần 3: 110 túi
+- Tuần 4: 115 túi
+→ Trung bình: ~110 túi/tuần
+```
+
+**Dự báo:**
+```
+Tồn kho hiện tại: 180 túi
+Dự kiến hết sau: 180 ÷ 110 ≈ 1.6 tuần
+
+→ ⚠️ CẦN ĐỔ THÊM TRONG VÒNG 1 TUẦN!
+```
+
+---
+
+### Case 3: So sánh hiệu suất nhân viên
+
+**Thống kê:**
+```
+Nhân viên A: Dùng 500 túi trong 10 lần cấy
+Nhân viên B: Dùng 300 túi trong 10 lần cấy
+Nhân viên C: Dùng 700 túi trong 10 lần cấy
+
+→ Trung bình A: 50 túi/lần
+→ Trung bình B: 30 túi/lần
+→ Trung bình C: 70 túi/lần
+```
+
+**Phân tích:**
+- Nhân viên C dùng nhiều → Có thể cấy loại cây lớn hơn
+- Nhân viên B dùng ít → Cấy ít hoặc hiệu quả cao
+- Cần xem thêm: Loại cây, năng suất, tỷ lệ nhiễm
+
+───────────────────────────────────────────────────────────
+
+## 📊 DỮ LIỆU NGUỒN
+
+### Tổng nhập kho:
+```sql
+SELECT SUM(so_luong_ban_dau) FROM kho_moi_truong
+```
+
+### Tổng xuất:
+```sql
+SELECT SUM(so_tui_con) FROM nhat_ky_cay
+WHERE ma_so_moi_truong_con = [ma_so]
+```
+
+### Tồn kho:
+```sql
+SELECT SUM(so_luong_con_lai) FROM kho_moi_truong
+```
+
+### Lịch sử xuất:
+```sql
+SELECT ngay_cay, nhan_vien, so_tui_con
+FROM nhat_ky_cay
+ORDER BY ngay_cay DESC
+```
+
+───────────────────────────────────────────────────────────
+
+## ⚠️ LƯU Ý
+
+1. **Chênh lệch là bình thường nếu:**
+   - Có lô bị hỏng đã loại bỏ
+   - Môi trường bị ô nhiễm không dùng được
+   - Hao hụt tự nhiên (bay hơi, khô)
+
+2. **Cần kiểm tra nếu chênh lệch lớn:**
+   - > 5% tổng nhập → Nghi ngờ sai sót dữ liệu
+   - > 10% → Có vấn đề nghiêm trọng
+
+3. **Cập nhật thường xuyên:**
+   - Nhập kho đúng lúc đổ môi trường
+   - Nhật ký cấy chính xác
+   - Kiểm kê định kỳ (1 tháng 1 lần)
+
+───────────────────────────────────────────────────────────
+
+## ✅ LỢI ÍCH
+
+### Quản lý:
+- ✅ Đối chiếu chính xác nhập - xuất - tồn
+- ✅ Phát hiện thất thoát, sai sót
+- ✅ Dự báo nhu cầu môi trường
+- ✅ Tối ưu chi phí (tránh dư thừa)
+
+### Nhân viên:
+- ✅ Xem lịch sử đã dùng bao nhiêu
+- ✅ So sánh với đồng nghiệp
+- ✅ Cải thiện hiệu suất
+
+### Báo cáo:
+- ✅ Xuất Excel (tính năng sắp có)
+- ✅ Thống kê theo tháng, quý
+- ✅ Biểu đồ trực quan
+
+═══════════════════════════════════════════════════════════
+   Green Straw Hat - Happiness Together 🌱
+═══════════════════════════════════════════════════════════
+
