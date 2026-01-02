@@ -4424,21 +4424,44 @@ else:
                 # Tạo dictionary để map
                 dict_phong_sang = {}
                 danh_sach_lua_chon = []
+                danh_sach_hien_thi = []  # Label ngắn gọn
                 
                 for idx, row in df_phong_sang.iterrows():
-                    label = f"{row['ten_giong']} - {row['chu_ky']} - Ngày: {row['ngay_cay']} - NV: {row['nhan_vien']} ({row['tong_so_tui']} túi)"
-                    danh_sach_lua_chon.append(label)
-                    dict_phong_sang[label] = row
+                    # Label đầy đủ (để map)
+                    label_full = f"{row['ten_giong']} - {row['chu_ky']} - Ngày: {row['ngay_cay']} - NV: {row['nhan_vien']} ({row['tong_so_tui']} túi)"
+                    # Label ngắn gọn (hiển thị dropdown)
+                    label_short = f"🌱 {row['ten_giong']} - 📅 {row['ngay_cay']} ({row['tong_so_tui']} túi)"
+                    
+                    danh_sach_lua_chon.append(label_full)
+                    danh_sach_hien_thi.append(label_short)
+                    dict_phong_sang[label_short] = row
                 
                 # DROPDOWN RA NGOÀI FORM để tương tác động
                 st.markdown("#### 🎯 Chọn lô cấy từ Phòng Sáng")
                 
-                lo_chon = st.selectbox(
-                    "Chọn lô cần kiểm tra *",
-                    options=danh_sach_lua_chon,
-                    help="Chọn lô cấy đã hoàn thành chu kỳ trong Phòng Sáng",
-                    key="lo_chon_mosoi"
+                # Tùy chọn: Dropdown hoặc Radio (dễ bấm hơn trên mobile)
+                chon_kieu = st.radio(
+                    "Cách chọn lô:",
+                    ["📋 Dropdown (gọn)", "🔘 Danh sách (dễ bấm)"],
+                    horizontal=True,
+                    help="Chọn 'Danh sách' nếu dùng điện thoại"
                 )
+                
+                if chon_kieu == "📋 Dropdown (gọn)":
+                    lo_chon = st.selectbox(
+                        "Chọn lô cần kiểm tra *",
+                        options=danh_sach_hien_thi,
+                        help="Chọn lô cấy đã hoàn thành chu kỳ trong Phòng Sáng",
+                        key="lo_chon_mosoi_dropdown"
+                    )
+                else:
+                    # Radio buttons - dễ bấm hơn trên mobile
+                    lo_chon = st.radio(
+                        "Chọn lô cần kiểm tra *",
+                        options=danh_sach_hien_thi,
+                        help="Bấm vào lô cần kiểm tra",
+                        key="lo_chon_mosoi_radio"
+                    )
                 
                 # Lấy thông tin lô đã chọn
                 if lo_chon:
