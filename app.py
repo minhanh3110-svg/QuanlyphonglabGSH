@@ -1227,27 +1227,6 @@ else:
                     gio_ket_thuc = datetime.now().time()
                 
                 st.markdown("---")
-                st.markdown("#### 🧪 Thông tin môi trường")
-                
-                # Môi trường mẹ
-                moi_truong_me = st.selectbox(
-                    "Môi trường mẹ *",
-                    options=list(dict_moi_truong.values()),
-                    index=0,
-                    help="Chọn môi trường mẹ"
-                )
-                ma_so_moi_truong_me = next((k for k, v in dict_moi_truong.items() if v == moi_truong_me), None)
-                
-                # Môi trường con
-                moi_truong_con = st.selectbox(
-                    "Môi trường con *",
-                    options=list(dict_moi_truong.values()),
-                    index=0,
-                    help="Chọn môi trường con"
-                )
-                ma_so_moi_truong_con = next((k for k, v in dict_moi_truong.items() if v == moi_truong_con), None)
-                
-                st.markdown("---")
                 st.markdown("#### 👨‍🌾 Thông tin túi mẹ")
                 
                 so_tui_me = st.number_input(
