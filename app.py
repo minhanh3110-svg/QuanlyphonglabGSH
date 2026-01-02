@@ -1749,7 +1749,7 @@ else:
     if is_admin:
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Mô Soi", "Đối soát Mô Soi", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
+            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý & Phân tích Nhiễm", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Mô Soi", "Đối soát Mô Soi", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
         )
     else:
         # NHÂN VIÊN: Chỉ xem nhật ký cá nhân + báo cáo năng suất/nhiễm
@@ -3145,6 +3145,382 @@ else:
                 st.warning("⚠️ Không có lô nào phù hợp với bộ lọc đã chọn.")
         else:
             st.info("ℹ️ Chưa có dữ liệu. Vui lòng nhập liệu ở trang 'Nhập liệu' trước.")
+    
+    # ========== TRANG QUẢN LÝ & PHÂN TÍCH NHIỄM (CHỈ ADMIN) ==========
+    elif menu == "Quản lý & Phân tích Nhiễm" and is_admin:
+        st.header("🔬 Quản lý & Phân tích Nhiễm")
+        st.markdown("**Phân tích chuyên sâu tỷ lệ nhiễm theo nhân viên, giống cây và thời gian**")
+        st.markdown("---")
+        
+        conn = sqlite3.connect('data.db')
+        
+        # ========== BỘ LỌC DỮ LIỆU ==========
+        st.subheader("🔍 Bộ lọc dữ liệu")
+        
+        col_filter1, col_filter2, col_filter3, col_filter4 = st.columns(4)
+        
+        with col_filter1:
+            # Lọc theo nhân viên
+            df_nhan_vien = pd.read_sql_query('SELECT DISTINCT ma_nhan_vien, ten_nhan_vien FROM tai_khoan ORDER BY ten_nhan_vien', conn)
+            nhan_vien_options = ['Tất cả'] + [f"{row['ten_nhan_vien']} ({row['ma_nhan_vien']})" for _, row in df_nhan_vien.iterrows()]
+            nhan_vien_filter = st.selectbox("Nhân viên", options=nhan_vien_options)
+            
+            if nhan_vien_filter != 'Tất cả':
+                ma_nv_filter = nhan_vien_filter.split('(')[1].strip(')')
+            else:
+                ma_nv_filter = None
+        
+        with col_filter2:
+            # Lọc theo giống
+            df_giong = pd.read_sql_query('SELECT DISTINCT ten_giong FROM danh_muc_ten_giong ORDER BY ten_giong', conn)
+            giong_options = ['Tất cả'] + df_giong['ten_giong'].tolist()
+            giong_filter = st.selectbox("Giống cây", options=giong_options)
+        
+        with col_filter3:
+            # Lọc theo loại thời gian
+            loai_thoi_gian = st.selectbox(
+                "Lọc theo",
+                options=["Khoảng ngày", "Tuần cấy", "Tháng/Năm"]
+            )
+        
+        with col_filter4:
+            # Tùy chọn thời gian
+            if loai_thoi_gian == "Khoảng ngày":
+                ngay_bd = st.date_input("Từ ngày", value=date.today() - timedelta(days=30))
+                ngay_kt = st.date_input("Đến ngày", value=date.today())
+                where_time = f"ngay_cay BETWEEN '{ngay_bd.strftime('%Y-%m-%d')}' AND '{ngay_kt.strftime('%Y-%m-%d')}'"
+            elif loai_thoi_gian == "Tuần cấy":
+                tuan_filter = st.number_input("Tuần", min_value=1, max_value=53, value=date.today().isocalendar()[1])
+                where_time = f"tuan = {tuan_filter}"
+            else:  # Tháng/Năm
+                thang_filter = st.selectbox("Tháng", options=list(range(1, 13)), index=date.today().month - 1)
+                nam_filter = st.number_input("Năm", min_value=2020, max_value=2030, value=date.today().year)
+                where_time = f"thang = {thang_filter} AND strftime('%Y', ngay_cay) = '{nam_filter}'"
+        
+        # Build WHERE clause
+        where_clauses = [where_time]
+        if ma_nv_filter:
+            where_clauses.append(f"nhat_ky_cay.ma_nhan_vien = '{ma_nv_filter}'")
+        if giong_filter != 'Tất cả':
+            where_clauses.append(f"nhat_ky_cay.ten_giong = '{giong_filter}'")
+        
+        where_sql = " AND ".join(where_clauses)
+        
+        st.markdown("---")
+        
+        # ========== TÍNH TOÁN TỶ LỆ SẠCH ==========
+        st.subheader("📊 Tổng hợp Tỷ lệ Sạch")
+        
+        # Query dữ liệu nhật ký cấy
+        query_nhat_ky = f'''
+            SELECT 
+                nhat_ky_cay.ma_nhan_vien,
+                nhat_ky_cay.nhan_vien,
+                nhat_ky_cay.ten_giong,
+                nhat_ky_cay.tinh_trang,
+                nhat_ky_cay.so_tui_con,
+                nhat_ky_cay.id
+            FROM nhat_ky_cay
+            WHERE {where_sql}
+        '''
+        
+        df_nhat_ky = pd.read_sql_query(query_nhat_ky, conn)
+        
+        if len(df_nhat_ky) > 0:
+            # Phân loại theo mã tình trạng
+            df_nhat_ky['ma_tinh_trang'] = df_nhat_ky['tinh_trang'].apply(lambda x: get_ma_tinh_trang(x))
+            df_nhat_ky['loai_tinh_trang'] = df_nhat_ky['ma_tinh_trang'].apply(
+                lambda x: phan_loai_tinh_trang(x)[0] if x else 'unknown'
+            )
+            
+            # Tính toán theo nhân viên
+            summary_data = []
+            
+            for (ma_nv, ten_nv), group in df_nhat_ky.groupby(['ma_nhan_vien', 'nhan_vien']):
+                tong_tui = group['so_tui_con'].sum()
+                
+                # Phân loại
+                tui_sach = group[group['loai_tinh_trang'] == 'sach']['so_tui_con'].sum()
+                tui_khuan = group[group['loai_tinh_trang'] == 'khuan']['so_tui_con'].sum()
+                tui_huy = group[group['loai_tinh_trang'] == 'huy']['so_tui_con'].sum()
+                
+                # Tính tỷ lệ
+                ty_le_sach = (tui_sach / tong_tui * 100) if tong_tui > 0 else 0
+                ty_le_khuan = (tui_khuan / tong_tui * 100) if tong_tui > 0 else 0
+                ty_le_huy = (tui_huy / tong_tui * 100) if tong_tui > 0 else 0
+                
+                summary_data.append({
+                    'Mã NV': ma_nv,
+                    'Nhân viên': ten_nv,
+                    'Tổng túi làm': tong_tui,
+                    'Túi sạch (Mã 3)': tui_sach,
+                    'Túi khuẩn (Mã 5)': tui_khuan,
+                    'Túi hủy (Mã 9)': tui_huy,
+                    'Tỷ lệ sạch %': round(ty_le_sach, 1),
+                    'Tỷ lệ khuẩn %': round(ty_le_khuan, 1),
+                    'Tỷ lệ hủy %': round(ty_le_huy, 1)
+                })
+            
+            df_summary = pd.DataFrame(summary_data)
+            
+            # Metrics tổng quan
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Tổng túi", f"{df_summary['Tổng túi làm'].sum():,}")
+            with col2:
+                ty_le_sach_tb = (df_summary['Túi sạch (Mã 3)'].sum() / df_summary['Tổng túi làm'].sum() * 100) if df_summary['Tổng túi làm'].sum() > 0 else 0
+                st.metric("Tỷ lệ sạch TB", f"{ty_le_sach_tb:.1f}%")
+            with col3:
+                ty_le_khuan_tb = (df_summary['Túi khuẩn (Mã 5)'].sum() / df_summary['Tổng túi làm'].sum() * 100) if df_summary['Tổng túi làm'].sum() > 0 else 0
+                st.metric("Tỷ lệ khuẩn TB", f"{ty_le_khuan_tb:.1f}%")
+            with col4:
+                ty_le_huy_tb = (df_summary['Túi hủy (Mã 9)'].sum() / df_summary['Tổng túi làm'].sum() * 100) if df_summary['Tổng túi làm'].sum() > 0 else 0
+                st.metric("Tỷ lệ hủy TB", f"{ty_le_huy_tb:.1f}%")
+            
+            st.markdown("---")
+            
+            # Bảng chi tiết với highlight
+            st.markdown("#### 📋 Bảng chi tiết theo nhân viên")
+            
+            def highlight_ty_le(row):
+                styles = [''] * len(row)
+                # Highlight tỷ lệ hủy > 5%
+                if row['Tỷ lệ hủy %'] > 5:
+                    styles[-1] = 'background-color: #f8d7da; font-weight: bold; color: #721c24'
+                # Highlight tỷ lệ sạch < 85%
+                if row['Tỷ lệ sạch %'] < 85:
+                    styles[-3] = 'background-color: #fff3cd; font-weight: bold'
+                # Highlight tỷ lệ sạch >= 95%
+                elif row['Tỷ lệ sạch %'] >= 95:
+                    styles[-3] = 'background-color: #d4edda; font-weight: bold; color: #155724'
+                return styles
+            
+            styled_df = df_summary.style.apply(highlight_ty_le, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+            # Chú thích
+            st.info("""
+            **Chú thích màu sắc:**
+            - 🟢 **Xanh:** Tỷ lệ sạch ≥ 95% (Xuất sắc)
+            - 🟡 **Vàng:** Tỷ lệ sạch < 85% (Cần cải thiện)
+            - 🔴 **Đỏ:** Tỷ lệ hủy > 5% (Cảnh báo)
+            """)
+            
+            st.markdown("---")
+            
+            # ========== BIỂU ĐỒ SO SÁNH ==========
+            st.subheader("📈 Biểu đồ So sánh")
+            
+            tab1, tab2, tab3 = st.tabs(["So sánh Nhân viên", "So sánh Giống cây", "Phân tích Nguyên nhân"])
+            
+            # Tab 1: So sánh nhân viên
+            with tab1:
+                import plotly.graph_objects as go
+                
+                fig = go.Figure()
+                
+                fig.add_trace(go.Bar(
+                    name='Sạch (Mã 3)',
+                    x=df_summary['Nhân viên'],
+                    y=df_summary['Tỷ lệ sạch %'],
+                    marker_color='#28a745'
+                ))
+                
+                fig.add_trace(go.Bar(
+                    name='Khuẩn (Mã 5)',
+                    x=df_summary['Nhân viên'],
+                    y=df_summary['Tỷ lệ khuẩn %'],
+                    marker_color='#ff8c00'
+                ))
+                
+                fig.add_trace(go.Bar(
+                    name='Hủy (Mã 9)',
+                    x=df_summary['Nhân viên'],
+                    y=df_summary['Tỷ lệ hủy %'],
+                    marker_color='#8b0000'
+                ))
+                
+                fig.update_layout(
+                    title="Tỷ lệ nhiễm theo Nhân viên",
+                    xaxis_title="Nhân viên",
+                    yaxis_title="Tỷ lệ (%)",
+                    barmode='group',
+                    height=500
+                )
+                
+                # Thêm đường cảnh báo 5%
+                fig.add_hline(y=5, line_dash="dash", line_color="red", 
+                             annotation_text="Ngưỡng cảnh báo 5%")
+                
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Tab 2: So sánh giống cây
+            with tab2:
+                # Tính toán theo giống
+                summary_giong = []
+                
+                for giong, group in df_nhat_ky.groupby('ten_giong'):
+                    tong_tui = group['so_tui_con'].sum()
+                    tui_sach = group[group['loai_tinh_trang'] == 'sach']['so_tui_con'].sum()
+                    tui_khuan = group[group['loai_tinh_trang'] == 'khuan']['so_tui_con'].sum()
+                    tui_huy = group[group['loai_tinh_trang'] == 'huy']['so_tui_con'].sum()
+                    
+                    ty_le_sach = (tui_sach / tong_tui * 100) if tong_tui > 0 else 0
+                    ty_le_khuan = (tui_khuan / tong_tui * 100) if tong_tui > 0 else 0
+                    ty_le_huy = (tui_huy / tong_tui * 100) if tong_tui > 0 else 0
+                    
+                    summary_giong.append({
+                        'Giống': giong,
+                        'Tổng túi': tong_tui,
+                        'Tỷ lệ sạch %': round(ty_le_sach, 1),
+                        'Tỷ lệ khuẩn %': round(ty_le_khuan, 1),
+                        'Tỷ lệ hủy %': round(ty_le_huy, 1)
+                    })
+                
+                df_giong_summary = pd.DataFrame(summary_giong)
+                
+                fig2 = go.Figure()
+                
+                fig2.add_trace(go.Bar(
+                    name='Sạch (Mã 3)',
+                    x=df_giong_summary['Giống'],
+                    y=df_giong_summary['Tỷ lệ sạch %'],
+                    marker_color='#28a745'
+                ))
+                
+                fig2.add_trace(go.Bar(
+                    name='Khuẩn (Mã 5)',
+                    x=df_giong_summary['Giống'],
+                    y=df_giong_summary['Tỷ lệ khuẩn %'],
+                    marker_color='#ff8c00'
+                ))
+                
+                fig2.add_trace(go.Bar(
+                    name='Hủy (Mã 9)',
+                    x=df_giong_summary['Giống'],
+                    y=df_giong_summary['Tỷ lệ hủy %'],
+                    marker_color='#8b0000'
+                ))
+                
+                fig2.update_layout(
+                    title="Tỷ lệ nhiễm theo Giống cây",
+                    xaxis_title="Giống cây",
+                    yaxis_title="Tỷ lệ (%)",
+                    barmode='group',
+                    height=500
+                )
+                
+                fig2.add_hline(y=5, line_dash="dash", line_color="red",
+                              annotation_text="Ngưỡng cảnh báo 5%")
+                
+                st.plotly_chart(fig2, use_container_width=True)
+                
+                # Bảng chi tiết giống
+                st.markdown("#### Chi tiết theo giống")
+                st.dataframe(df_giong_summary, use_container_width=True, hide_index=True)
+            
+            # Tab 3: Phân tích nguyên nhân
+            with tab3:
+                st.markdown("#### 🔍 Phân tích Nguyên nhân Nhiễm")
+                
+                # Biểu đồ tròn tổng thể
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    tong_sach = df_summary['Túi sạch (Mã 3)'].sum()
+                    tong_khuan = df_summary['Túi khuẩn (Mã 5)'].sum()
+                    tong_huy = df_summary['Túi hủy (Mã 9)'].sum()
+                    
+                    fig_pie = go.Figure(data=[go.Pie(
+                        labels=['Sạch (Mã 3)', 'Khuẩn (Mã 5)', 'Hủy (Mã 9)'],
+                        values=[tong_sach, tong_khuan, tong_huy],
+                        marker=dict(colors=['#28a745', '#ff8c00', '#8b0000']),
+                        hole=0.3
+                    )])
+                    
+                    fig_pie.update_layout(
+                        title="Phân bố Tổng thể",
+                        height=400
+                    )
+                    
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                
+                with col2:
+                    st.markdown("**Phân tích:**")
+                    
+                    if ty_le_huy_tb > 10:
+                        st.error(f"""
+                        🔴 **CẢNH BÁO NGHIÊM TRỌNG!**
+                        
+                        Tỷ lệ hủy trung bình: **{ty_le_huy_tb:.1f}%**
+                        
+                        **Vượt quá ngưỡng cho phép (10%)**
+                        
+                        **Nguyên nhân có thể:**
+                        - Môi trường nhiễm khuẩn
+                        - Quy trình tiệt trùng kém
+                        - Kỹ thuật cấy chưa đạt
+                        
+                        **Hành động:**
+                        - Kiểm tra ngay môi trường
+                        - Đào tạo lại nhân viên
+                        - Cải thiện quy trình
+                        """)
+                    elif ty_le_huy_tb > 5:
+                        st.warning(f"""
+                        ⚠️ **CẦN CHÚ Ý!**
+                        
+                        Tỷ lệ hủy: **{ty_le_huy_tb:.1f}%**
+                        
+                        Cần giảm xuống < 5%
+                        """)
+                    else:
+                        st.success(f"""
+                        ✅ **TỐT!**
+                        
+                        Tỷ lệ hủy: **{ty_le_huy_tb:.1f}%**
+                        
+                        Trong ngưỡng cho phép
+                        """)
+                    
+                    if ty_le_khuan_tb > 10:
+                        st.warning(f"""
+                        ⚠️ **Tỷ lệ khuẩn nhẹ cao: {ty_le_khuan_tb:.1f}%**
+                        
+                        Cần theo dõi chặt để tránh lây lan
+                        """)
+            
+            st.markdown("---")
+            
+            # ========== XUẤT DỮ LIỆU ==========
+            st.subheader("📥 Xuất dữ liệu")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Xuất tổng hợp nhân viên
+                csv_nv = df_summary.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    "📥 Tải Báo cáo Nhân viên (CSV)",
+                    data=csv_nv,
+                    file_name=f"bao_cao_nhiem_nhan_vien_{date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+            
+            with col2:
+                # Xuất chi tiết giống
+                if len(df_giong_summary) > 0:
+                    csv_giong = df_giong_summary.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        "📥 Tải Báo cáo Giống cây (CSV)",
+                        data=csv_giong,
+                        file_name=f"bao_cao_nhiem_giong_{date.today().strftime('%Y%m%d')}.csv",
+                        mime="text/csv"
+                    )
+        else:
+            st.info("ℹ️ Không có dữ liệu phù hợp với bộ lọc đã chọn.")
+        
+        conn.close()
     
     # ========== TRANG BÁO CÁO NĂNG SUẤT (CHỈ ADMIN) ==========
     elif menu == "Báo cáo Năng suất" and is_admin:
