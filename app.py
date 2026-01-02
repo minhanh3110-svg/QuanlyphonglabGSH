@@ -933,7 +933,36 @@ else:
 
 # ========== TRANG ĐĂNG NHẬP ==========
 if not st.session_state.logged_in:
-    st.markdown('<div class="main-header">🌱 QUẢN LÝ PHÒNG NUÔI CẤY MÔ 🌱</div>', unsafe_allow_html=True)
+    # ========== HEADER VỚI LOGO ==========
+    # Hiển thị logo công ty ở trang chủ (nếu có)
+    logo = load_logo()
+    if logo:
+        col_logo, col_title, col_spacer = st.columns([1, 3, 1])
+        
+        with col_logo:
+            # Logo bên trái
+            logo_display = logo.copy()
+            logo_width = 150
+            logo_height = int(logo_display.height * (logo_width / logo_display.width))
+            logo_display = logo_display.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+            
+            # Convert sang RGB để hiển thị
+            if logo_display.mode == 'RGBA':
+                bg = Image.new('RGB', logo_display.size, (255, 255, 255))
+                bg.paste(logo_display, mask=logo_display.split()[3])
+                logo_display = bg
+            
+            st.image(logo_display, use_column_width=True)
+        
+        with col_title:
+            st.markdown('<div class="main-header">🌱 QUẢN LÝ PHÒNG NUÔI CẤY MÔ 🌱</div>', unsafe_allow_html=True)
+        
+        with col_spacer:
+            # Logo bên phải (đối xứng)
+            st.image(logo_display, use_column_width=True)
+    else:
+        # Không có logo, chỉ hiển thị header
+        st.markdown('<div class="main-header">🌱 QUẢN LÝ PHÒNG NUÔI CẤY MÔ 🌱</div>', unsafe_allow_html=True)
     
     st.header("🔐 Đăng nhập")
     st.markdown("---")
@@ -995,8 +1024,36 @@ else:
     user_info = st.session_state.user_info
     is_admin = user_info['quyen_han'] == 'admin'
     
-    # Header
-    st.markdown('<div class="main-header">🌱 QUẢN LÝ PHÒNG NUÔI CẤY MÔ 🌱</div>', unsafe_allow_html=True)
+    # Header với logo
+    # ========== HEADER VỚI LOGO ==========
+    logo = load_logo()
+    if logo:
+        col_logo_main, col_title_main, col_spacer_main = st.columns([1, 3, 1])
+        
+        with col_logo_main:
+            # Logo bên trái
+            logo_display = logo.copy()
+            logo_width = 120
+            logo_height = int(logo_display.height * (logo_width / logo_display.width))
+            logo_display = logo_display.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+            
+            # Convert sang RGB để hiển thị
+            if logo_display.mode == 'RGBA':
+                bg = Image.new('RGB', logo_display.size, (255, 255, 255))
+                bg.paste(logo_display, mask=logo_display.split()[3])
+                logo_display = bg
+            
+            st.image(logo_display, use_column_width=True)
+        
+        with col_title_main:
+            st.markdown('<div class="main-header">🌱 QUẢN LÝ PHÒNG NUÔI CẤY MÔ 🌱</div>', unsafe_allow_html=True)
+        
+        with col_spacer_main:
+            # Logo bên phải (đối xứng)
+            st.image(logo_display, use_column_width=True)
+    else:
+        # Không có logo, chỉ hiển thị header
+        st.markdown('<div class="main-header">🌱 QUẢN LÝ PHÒNG NUÔI CẤY MÔ 🌱</div>', unsafe_allow_html=True)
     
     # Sidebar với thông tin người dùng
     # ========== HIỂN THỊ LOGO CÔNG TY ==========
