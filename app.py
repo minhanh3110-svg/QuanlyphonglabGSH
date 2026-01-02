@@ -4396,10 +4396,10 @@ else:
                     ps.ma_nhan_vien,
                     nk.tuan AS tuan_cay,
                     nk.thang AS thang_cay,
-                    ps.tong_tui_sach + ps.tong_tui_khuan + ps.tong_tui_huy AS tong_so_tui,
-                    ps.tong_tui_sach,
-                    ps.tong_tui_khuan,
-                    ps.tong_tui_huy,
+                    ps.tong_so_tui,
+                    ps.so_tui_sach,
+                    (ps.so_tui_khuan_nhe + ps.so_tui_khuan_nang + ps.so_tui_khuan_moi_truong) AS so_tui_khuan,
+                    (ps.so_tui_nam) AS so_tui_huy,
                     ps.trang_thai
                 FROM quan_ly_phong_sang ps
                 LEFT JOIN nhat_ky_cay nk ON ps.id_nhat_ky_cay = nk.id
@@ -4471,11 +4471,11 @@ else:
                         with st.expander("📊 Chi tiết tình trạng từ Phòng Sáng"):
                             col_a, col_b, col_c = st.columns(3)
                             with col_a:
-                                st.metric("✅ Túi sạch", f"{int(thong_tin_lo['tong_tui_sach'])} túi")
+                                st.metric("✅ Túi sạch", f"{int(thong_tin_lo['so_tui_sach'])} túi")
                             with col_b:
-                                st.metric("⚠️ Túi khuẩn", f"{int(thong_tin_lo['tong_tui_khuan'])} túi")
+                                st.metric("⚠️ Túi khuẩn", f"{int(thong_tin_lo['so_tui_khuan'])} túi")
                             with col_c:
-                                st.metric("❌ Túi hủy", f"{int(thong_tin_lo['tong_tui_huy'])} túi")
+                                st.metric("❌ Túi hủy (Nấm)", f"{int(thong_tin_lo['so_tui_huy'])} túi")
                         
                         st.markdown("---")
                         st.markdown("#### 📅 Thông tin kiểm tra")
@@ -4497,7 +4497,7 @@ else:
                                 "Số túi nhiễm (Nấm + Khuẩn nặng) *",
                                 min_value=0,
                                 max_value=so_luong_ban_dau,
-                                value=int(thong_tin_lo['tong_tui_khuan'] + thong_tin_lo['tong_tui_huy']) if (thong_tin_lo['tong_tui_khuan'] + thong_tin_lo['tong_tui_huy']) > 0 else 0,
+                                value=int(thong_tin_lo['so_tui_khuan'] + thong_tin_lo['so_tui_huy']) if (thong_tin_lo['so_tui_khuan'] + thong_tin_lo['so_tui_huy']) > 0 else 0,
                                 step=1,
                                 help="Tổng túi bị nấm, khuẩn nặng (không dùng được)"
                             )
