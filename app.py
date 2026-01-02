@@ -278,6 +278,30 @@ def migrate_database():
             except:
                 pass
         
+        # Thêm cột ma_lo_moi_truong_con nếu chưa có
+        if 'ma_lo_moi_truong_con' not in columns:
+            try:
+                c.execute("ALTER TABLE nhat_ky_cay ADD COLUMN ma_lo_moi_truong_con TEXT")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột canh_bao_moi_truong_qua_han nếu chưa có
+        if 'canh_bao_moi_truong_qua_han' not in columns:
+            try:
+                c.execute("ALTER TABLE nhat_ky_cay ADD COLUMN canh_bao_moi_truong_qua_han INTEGER DEFAULT 0")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột tuoi_moi_truong nếu chưa có
+        if 'tuoi_moi_truong' not in columns:
+            try:
+                c.execute("ALTER TABLE nhat_ky_cay ADD COLUMN tuoi_moi_truong INTEGER")
+                conn.commit()
+            except:
+                pass
+        
         # Nếu không có cột ngay_cay hoặc ma_so_moi_truong_me, đây là cấu trúc cũ
         if 'ngay_cay' not in columns or 'ma_so_moi_truong_me' not in columns:
             # Backup dữ liệu cũ nếu có
@@ -685,6 +709,127 @@ def tao_ma_lo_moi_truong():
     so_thu_tu = count + 1
     ma_lo = f"MT-{ngay_hom_nay}-{so_thu_tu:03d}"
     return ma_lo
+
+def tinh_tuoi_moi_truong(ngay_do):
+    """
+    Tính số ngày đã trôi qua kể từ ngày đổ môi trường
+    Returns: (so_ngay: int, muc_canh_bao: str, icon: str, mau: str)
+    """
+    try:
+        ngay_do_dt = datetime.strptime(ngay_do, "%Y-%m-%d")
+        ngay_hien_tai = datetime.now()
+        so_ngay = (ngay_hien_tai - ngay_do_dt).days
+        
+        # Xác định mức cảnh báo
+        if so_ngay <= 15:
+            return so_ngay, "OK", "✅", "#28a745"  # Xanh
+        elif so_ngay <= 20:
+            return so_ngay, "CẦN ƯU TIÊN", "⚠️", "#ffc107"  # Vàng
+        elif so_ngay <= 30:
+            return so_ngay, "SẮP QUÁ HẠN", "🟠", "#ff8c00"  # Cam
+        else:
+            return so_ngay, "QUÁ HẠN", "🔴", "#dc3545"  # Đỏ
+    except:
+        return 0, "ERROR", "❓", "#6c757d"
+
+def get_danh_sach_lo_moi_truong_co_canh_bao(ma_so_moi_truong):
+    """
+    Lấy danh sách lô môi trường còn hàng với thông tin cảnh báo tuổi
+    Returns: list of dict với thông tin lô + cảnh báo
+    """
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    
+    c.execute('''
+        SELECT id, ma_lo, so_luong_con_lai, ngay_do, vi_tri_kho, nguoi_do
+        FROM kho_moi_truong
+        WHERE ma_so_moi_truong = ? AND so_luong_con_lai > 0
+        ORDER BY ngay_do ASC
+    ''', (ma_so_moi_truong,))
+    
+    rows = c.fetchall()
+    conn.close()
+    
+    danh_sach_lo = []
+    for row in rows:
+        lo_id, ma_lo, so_luong, ngay_do, vi_tri, nguoi_do = row
+        so_ngay, muc_canh_bao, icon, mau = tinh_tuoi_moi_truong(ngay_do)
+        
+        # Xác định gợi ý
+        goi_y = ""
+        if len(danh_sach_lo) == 0:  # Lô đầu tiên (cũ nhất)
+            goi_y = " 🌟 GỢI Ý DÙNG TRƯỚC"
+        
+        danh_sach_lo.append({
+            'id': lo_id,
+            'ma_lo': ma_lo,
+            'so_luong': so_luong,
+            'ngay_do': ngay_do,
+            'so_ngay': so_ngay,
+            'muc_canh_bao': muc_canh_bao,
+            'icon': icon,
+            'mau': mau,
+            'vi_tri': vi_tri,
+            'nguoi_do': nguoi_do if nguoi_do else "N/A",
+            'goi_y': goi_y,
+            'label': f"{icon} {ma_lo} | {ngay_do} ({so_ngay} ngày) | Còn: {so_luong} túi | {muc_canh_bao}{goi_y}"
+        })
+    
+    return danh_sach_lo
+
+def khau_tru_moi_truong_theo_lo(ma_lo_chon, so_luong_can_dung):
+    """
+    Khấu trừ môi trường từ lô cụ thể do người dùng chọn
+    Returns: (success: bool, message: str, thong_tin_lo: dict)
+    """
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    
+    # Lấy thông tin lô được chọn
+    c.execute('''
+        SELECT id, ma_lo, so_luong_con_lai, ngay_do, ma_so_moi_truong
+        FROM kho_moi_truong
+        WHERE ma_lo = ?
+    ''', (ma_lo_chon,))
+    
+    row = c.fetchone()
+    
+    if not row:
+        conn.close()
+        return False, f"⚠️ Không tìm thấy lô {ma_lo_chon}!", {}
+    
+    lo_id, ma_lo, so_luong_con_lai, ngay_do, ma_so_moi_truong = row
+    
+    # Kiểm tra đủ số lượng không
+    if so_luong_con_lai < so_luong_can_dung:
+        conn.close()
+        return False, f"⚠️ Lô {ma_lo} không đủ! Còn: {so_luong_con_lai}, Cần: {so_luong_can_dung}", {}
+    
+    # Khấu trừ
+    so_luong_moi = so_luong_con_lai - so_luong_can_dung
+    c.execute('''
+        UPDATE kho_moi_truong
+        SET so_luong_con_lai = ?
+        WHERE id = ?
+    ''', (so_luong_moi, lo_id))
+    
+    conn.commit()
+    conn.close()
+    
+    # Tính tuổi môi trường
+    so_ngay, muc_canh_bao, icon, mau = tinh_tuoi_moi_truong(ngay_do)
+    
+    thong_tin_lo = {
+        'ma_lo': ma_lo,
+        'so_luong_tru': so_luong_can_dung,
+        'ngay_do': ngay_do,
+        'so_ngay': so_ngay,
+        'muc_canh_bao': muc_canh_bao,
+        'qua_han': so_ngay > 30
+    }
+    
+    message = f"✅ Đã khấu trừ {so_luong_can_dung} túi từ lô {ma_lo} ({so_ngay} ngày)"
+    return True, message, thong_tin_lo
 
 def khau_tru_moi_truong_tu_kho(ma_so_moi_truong, so_luong_can_dung):
     """
