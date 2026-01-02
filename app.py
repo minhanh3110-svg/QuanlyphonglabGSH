@@ -3000,7 +3000,7 @@ else:
             
             # Hiển thị bảng với highlight
             def highlight_chenh_lech(row):
-                if row['Chênh lech'] != 0:
+                if row['Chênh lệch'] != 0:
                     return ['background-color: #fff3cd'] * len(row)
                 return [''] * len(row)
             
