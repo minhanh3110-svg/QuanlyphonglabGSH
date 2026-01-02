@@ -1167,33 +1167,49 @@ else:
                 st.markdown("#### ⏰ Thời gian làm việc cho giống này")
                 st.info("💡 Nhập giờ bắt đầu và kết thúc riêng cho từng giống cây")
                 
-                # Tự động lấy thời gian hiện tại làm mặc định
-                current_time = datetime.now().time()
-                default_end_time = (datetime.now() + timedelta(hours=4)).time()  # Mặc định 4 giờ/giống
-                
                 col_time1, col_time2 = st.columns(2)
                 
                 with col_time1:
-                    gio_bat_dau = st.time_input(
-                        "⏰ Giờ bắt đầu *",
-                        value=current_time,
-                        help="Giờ bắt đầu làm việc với giống này"
+                    gio_bat_dau_str = st.text_input(
+                        "⏰ Giờ bắt đầu (HH:MM) *",
+                        placeholder="Ví dụ: 08:00",
+                        help="Nhập giờ bắt đầu theo định dạng HH:MM (24 giờ)",
+                        key="gio_bd"
                     )
                 
                 with col_time2:
-                    gio_ket_thuc = st.time_input(
-                        "⏰ Giờ kết thúc *",
-                        value=default_end_time,
-                        help="Giờ kết thúc làm việc với giống này"
+                    gio_ket_thuc_str = st.text_input(
+                        "⏰ Giờ kết thúc (HH:MM) *",
+                        placeholder="Ví dụ: 12:00",
+                        help="Nhập giờ kết thúc theo định dạng HH:MM (24 giờ)",
+                        key="gio_kt"
                     )
                 
-                # Hiển thị tổng giờ làm tạm thời
-                tong_gio_temp = tinh_tong_gio_lam(
-                    gio_bat_dau.strftime("%H:%M"),
-                    gio_ket_thuc.strftime("%H:%M")
-                )
-                if tong_gio_temp > 0:
-                    st.success(f"⏱️ Thời gian làm việc: **{tong_gio_temp:.2f} giờ**")
+                # Validate và tính tổng giờ
+                if gio_bat_dau_str and gio_ket_thuc_str:
+                    try:
+                        # Kiểm tra định dạng
+                        datetime.strptime(gio_bat_dau_str, "%H:%M")
+                        datetime.strptime(gio_ket_thuc_str, "%H:%M")
+                        
+                        # Tính tổng giờ làm
+                        tong_gio_temp = tinh_tong_gio_lam(gio_bat_dau_str, gio_ket_thuc_str)
+                        if tong_gio_temp > 0:
+                            st.success(f"⏱️ Thời gian làm việc: **{tong_gio_temp:.2f} giờ**")
+                        elif tong_gio_temp == 0:
+                            st.warning("⚠️ Giờ bắt đầu và kết thúc giống nhau!")
+                        else:
+                            st.error("❌ Giờ kết thúc phải sau giờ bắt đầu!")
+                    except ValueError:
+                        st.error("❌ Định dạng giờ không đúng! Vui lòng nhập theo HH:MM (ví dụ: 08:00, 14:30)")
+                
+                # Convert sang time object để lưu vào database
+                try:
+                    gio_bat_dau = datetime.strptime(gio_bat_dau_str, "%H:%M").time() if gio_bat_dau_str else datetime.now().time()
+                    gio_ket_thuc = datetime.strptime(gio_ket_thuc_str, "%H:%M").time() if gio_ket_thuc_str else datetime.now().time()
+                except:
+                    gio_bat_dau = datetime.now().time()
+                    gio_ket_thuc = datetime.now().time()
                 
                 st.markdown("---")
                 st.markdown("#### 🧪 Thông tin môi trường")
