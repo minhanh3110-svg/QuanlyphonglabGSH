@@ -302,6 +302,14 @@ def migrate_database():
             except:
                 pass
         
+        # Thêm cột ma_lo_mo_soi nếu chưa có
+        if 'ma_lo_mo_soi' not in columns:
+            try:
+                c.execute("ALTER TABLE nhat_ky_cay ADD COLUMN ma_lo_mo_soi TEXT")
+                conn.commit()
+            except:
+                pass
+        
         # Nếu không có cột ngay_cay hoặc ma_so_moi_truong_me, đây là cấu trúc cũ
         if 'ngay_cay' not in columns or 'ma_so_moi_truong_me' not in columns:
             # Backup dữ liệu cũ nếu có
@@ -488,6 +496,32 @@ def init_database():
             ghi_chu TEXT,
             ngay_tao TEXT NOT NULL,
             FOREIGN KEY (ma_so_moi_truong) REFERENCES danh_muc_moi_truong(ma_so)
+        )
+    ''')
+    
+    # Bảng Quản lý Mô Soi (kết quả chu kỳ trước từ phòng sáng)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS mo_soi (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ma_lo_mo_soi TEXT UNIQUE NOT NULL,
+            ten_giong TEXT NOT NULL,
+            chu_ky_truoc TEXT NOT NULL,
+            ngay_soi TEXT NOT NULL,
+            tuan_soi INTEGER NOT NULL,
+            nam INTEGER NOT NULL,
+            so_luong_ban_dau INTEGER NOT NULL,
+            so_tui_nhiem INTEGER NOT NULL,
+            so_tui_sach INTEGER NOT NULL,
+            so_cum_moi_tui INTEGER NOT NULL,
+            tong_cum_sach INTEGER NOT NULL,
+            so_cum_da_cap INTEGER DEFAULT 0,
+            so_cum_con_lai INTEGER NOT NULL,
+            trang_thai TEXT NOT NULL DEFAULT 'Đang sử dụng',
+            nguoi_soi TEXT NOT NULL,
+            ma_nhan_vien TEXT NOT NULL,
+            ghi_chu TEXT,
+            ngay_tao TEXT NOT NULL,
+            ngay_cap_nhat TEXT NOT NULL
         )
     ''')
     
@@ -974,6 +1008,174 @@ def get_ten_moi_truong(ma_so):
     result = c.fetchone()
     conn.close()
     return result[0] if result else f"Mã {ma_so}"
+
+# ========== FUNCTIONS CHO QUẢN LÝ MÔ SOI ==========
+
+def tao_ma_lo_mo_soi():
+    """Tạo mã lô mô soi tự động: MS-YYYYMMDD-XXX"""
+    today = date.today().strftime("%Y%m%d")
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM mo_soi WHERE ma_lo_mo_soi LIKE ?", (f"MS-{today}-%",))
+    count = c.fetchone()[0]
+    conn.close()
+    return f"MS-{today}-{count+1:03d}"
+
+def get_danh_sach_mo_soi_kha_dung(ten_giong=None):
+    """
+    Lấy danh sách mô soi khả dụng (còn cụm chưa cấy)
+    Nếu có ten_giong, chỉ lấy lô của giống đó
+    Returns: List of dicts
+    """
+    conn = sqlite3.connect('data.db')
+    
+    if ten_giong:
+        query = '''
+            SELECT 
+                ma_lo_mo_soi,
+                ten_giong,
+                chu_ky_truoc,
+                ngay_soi,
+                tong_cum_sach,
+                so_cum_da_cap,
+                so_cum_con_lai,
+                so_cum_moi_tui,
+                trang_thai
+            FROM mo_soi
+            WHERE so_cum_con_lai > 0
+              AND trang_thai = 'Đang sử dụng'
+              AND ten_giong = ?
+            ORDER BY ngay_soi ASC
+        '''
+        df = pd.read_sql_query(query, conn, params=(ten_giong,))
+    else:
+        query = '''
+            SELECT 
+                ma_lo_mo_soi,
+                ten_giong,
+                chu_ky_truoc,
+                ngay_soi,
+                tong_cum_sach,
+                so_cum_da_cap,
+                so_cum_con_lai,
+                so_cum_moi_tui,
+                trang_thai
+            FROM mo_soi
+            WHERE so_cum_con_lai > 0
+              AND trang_thai = 'Đang sử dụng'
+            ORDER BY ngay_soi ASC
+        '''
+        df = pd.read_sql_query(query, conn)
+    
+    conn.close()
+    return df.to_dict('records') if len(df) > 0 else []
+
+def khau_tru_mo_soi(ma_lo_mo_soi, so_cum_can_dung):
+    """
+    Khấu trừ số cụm mô soi khi được dùng làm mô mẹ
+    Returns: (success: bool, message: str, so_cum_con_lai: int)
+    """
+    conn = sqlite3.connect('data.db')
+    c = conn.cursor()
+    
+    # Lấy thông tin lô mô soi
+    c.execute('''
+        SELECT so_cum_con_lai, so_cum_da_cap, ten_giong 
+        FROM mo_soi 
+        WHERE ma_lo_mo_soi = ?
+    ''', (ma_lo_mo_soi,))
+    
+    result = c.fetchone()
+    
+    if not result:
+        conn.close()
+        return False, "❌ Không tìm thấy lô mô soi", 0
+    
+    so_cum_con_lai, so_cum_da_cap, ten_giong = result
+    
+    if so_cum_con_lai < so_cum_can_dung:
+        conn.close()
+        return False, f"⚠️ Mô soi {ten_giong} chỉ còn {so_cum_con_lai} cụm, không đủ {so_cum_can_dung} cụm", so_cum_con_lai
+    
+    # Khấu trừ
+    so_cum_con_lai_moi = so_cum_con_lai - so_cum_can_dung
+    so_cum_da_cap_moi = so_cum_da_cap + so_cum_can_dung
+    
+    # Nếu hết mô soi, đánh dấu "Đã kết thúc chu kỳ"
+    trang_thai_moi = 'Đã kết thúc chu kỳ' if so_cum_con_lai_moi == 0 else 'Đang sử dụng'
+    
+    c.execute('''
+        UPDATE mo_soi
+        SET so_cum_da_cap = ?,
+            so_cum_con_lai = ?,
+            trang_thai = ?,
+            ngay_cap_nhat = ?
+        WHERE ma_lo_mo_soi = ?
+    ''', (so_cum_da_cap_moi, so_cum_con_lai_moi, trang_thai_moi, 
+          datetime.now().strftime('%Y-%m-%d %H:%M:%S'), ma_lo_mo_soi))
+    
+    conn.commit()
+    conn.close()
+    
+    return True, f"✅ Đã khấu trừ {so_cum_can_dung} cụm từ lô {ma_lo_mo_soi}", so_cum_con_lai_moi
+
+def get_bao_cao_doi_soat_mo_soi():
+    """
+    Tạo báo cáo đối soát: Mô Soi vs Mô Mẹ đã cấy
+    Returns: DataFrame với cột:
+        - ten_giong
+        - tong_cum_mo_soi (từ bảng mo_soi)
+        - tong_cum_da_cap (đã dùng làm mô mẹ)
+        - tong_cum_con_lai (chưa dùng)
+        - trang_thai (OK / DƯ MÔ / BẤT THƯỜNG)
+    """
+    conn = sqlite3.connect('data.db')
+    
+    # Lấy tổng mô soi theo giống
+    df_mo_soi = pd.read_sql_query('''
+        SELECT 
+            ten_giong,
+            SUM(tong_cum_sach) AS tong_cum_mo_soi,
+            SUM(so_cum_da_cap) AS tong_cum_da_cap,
+            SUM(so_cum_con_lai) AS tong_cum_con_lai
+        FROM mo_soi
+        GROUP BY ten_giong
+    ''', conn)
+    
+    # Lấy tổng mô mẹ đã cấy (từ nhật ký)
+    df_nhat_ky = pd.read_sql_query('''
+        SELECT 
+            ten_giong,
+            SUM(so_tui_me * so_cum_tui_me) AS tong_cum_me_da_cay
+        FROM nhat_ky_cay
+        WHERE ma_lo_mo_soi IS NOT NULL
+        GROUP BY ten_giong
+    ''', conn)
+    
+    conn.close()
+    
+    # Merge 2 bảng
+    if len(df_mo_soi) == 0:
+        return pd.DataFrame(columns=['ten_giong', 'tong_cum_mo_soi', 'tong_cum_da_cap', 
+                                     'tong_cum_con_lai', 'tong_cum_me_da_cay', 'chenh_lech', 'trang_thai'])
+    
+    df = df_mo_soi.merge(df_nhat_ky, on='ten_giong', how='left')
+    df['tong_cum_me_da_cay'] = df['tong_cum_me_da_cay'].fillna(0).astype(int)
+    
+    # Tính chênh lệch và trạng thái
+    df['chenh_lech'] = df['tong_cum_da_cap'] - df['tong_cum_me_da_cay']
+    
+    def xac_dinh_trang_thai(row):
+        if row['chenh_lech'] == 0:
+            return '✅ KHỚP'
+        elif row['chenh_lech'] > 0:
+            return f"⚠️ DƯ MÔ ({row['chenh_lech']} cụm)"
+        else:
+            return f"🔴 BẤT THƯỜNG (Vượt {abs(row['chenh_lech'])} cụm)"
+    
+    df['trang_thai'] = df.apply(xac_dinh_trang_thai, axis=1)
+    
+    return df
 
 # ========== HÀM TẠO MÃ QR VÀ TEM NHÃN ==========
 def load_logo():
@@ -1482,12 +1684,12 @@ else:
     if is_admin:
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
+            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Tổng hợp Phòng Sáng", "Quản lý Mô Soi", "Đối soát Mô Soi", "Quản lý Kho Môi trường", "Quản lý danh mục", "Quản lý tài khoản"]
         )
     else:
         menu = st.sidebar.selectbox(
             "📋 Chọn chức năng",
-            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Quản lý Kho Môi trường"]
+            ["Nhập liệu", "In tem nhãn", "Báo cáo Năng suất", "Quản lý Phòng Sáng", "Quản lý Mô Soi", "Quản lý Kho Môi trường"]
         )
     
     # ========== DASHBOARD VIỆC CẦN LÀM GẤP (ADMIN) ==========
@@ -1743,6 +1945,60 @@ else:
                     gio_ket_thuc = datetime.now().time()
                 
                 st.markdown("---")
+                st.markdown("#### 🔬 Nguồn gốc Mô Mẹ")
+                
+                # Lấy danh sách lô mô soi khả dụng cho giống này
+                danh_sach_lo_mo_soi = get_danh_sach_mo_soi_kha_dung(ten_giong)
+                
+                if len(danh_sach_lo_mo_soi) > 0:
+                    # Tạo options cho dropdown
+                    lo_options = {}
+                    for lo in danh_sach_lo_mo_soi:
+                        label = f"{lo['ma_lo_mo_soi']} | {lo['chu_ky_truoc']} | Còn: {lo['so_cum_con_lai']} cụm ({lo['so_cum_con_lai'] // lo['so_cum_moi_tui']} túi x {lo['so_cum_moi_tui']} cụm)"
+                        lo_options[label] = lo['ma_lo_mo_soi']
+                    
+                    # Hiển thị dropdown chọn lô
+                    lo_selected_label = st.selectbox(
+                        "Chọn lô Mô Soi *",
+                        options=list(lo_options.keys()),
+                        help="Chọn lô mô soi để lấy mô mẹ. Hệ thống sẽ tự động khấu trừ."
+                    )
+                    ma_lo_mo_soi = lo_options[lo_selected_label]
+                    
+                    # Lấy thông tin lô đã chọn
+                    lo_info = [lo for lo in danh_sach_lo_mo_soi if lo['ma_lo_mo_soi'] == ma_lo_mo_soi][0]
+                    
+                    # Hiển thị thông tin lô
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("📦 Mã lô", lo_info['ma_lo_mo_soi'])
+                    with col2:
+                        st.metric("🔄 Chu kỳ trước", lo_info['chu_ky_truoc'])
+                    with col3:
+                        st.metric("✅ Còn lại", f"{lo_info['so_cum_con_lai']} cụm")
+                    with col4:
+                        so_tui_toi_da = lo_info['so_cum_con_lai'] // lo_info['so_cum_moi_tui']
+                        st.metric("📊 Tối đa", f"~{so_tui_toi_da} túi")
+                    
+                    st.success(f"✅ Đã chọn lô **{ma_lo_mo_soi}** - Hệ thống sẽ tự động khấu trừ khi lưu nhật ký")
+                else:
+                    st.error(f"""
+                    🚫 **KHÔNG CÓ MÔ SOI CHO GIỐNG: {ten_giong}**
+                    
+                    **Nguyên nhân:**
+                    - Chưa nhập kết quả kiểm tra Mô Soi từ phòng sáng
+                    - Mô Soi của giống này đã hết
+                    
+                    **Hành động:**
+                    1. Vào trang "Quản lý Mô Soi"
+                    2. Nhập kết quả kiểm tra từ chu kỳ trước
+                    3. Quay lại nhập nhật ký cấy
+                    
+                    ⚠️ **KHÔNG THỂ NHẬP NHẬT KÝ** nếu không có Mô Soi!
+                    """)
+                    ma_lo_mo_soi = None
+                
+                st.markdown("---")
                 st.markdown("#### 👨‍🌾 Thông tin túi mẹ")
                 
                 so_tui_me = st.number_input(
@@ -1750,7 +2006,7 @@ else:
                     min_value=1,
                     value=1,
                     step=1,
-                    help="Số lượng túi mẹ sử dụng"
+                    help="Số lượng túi mẹ sử dụng từ lô mô soi"
                 )
                 
                 so_cum_tui_me = st.number_input(
@@ -1830,6 +2086,38 @@ else:
                         st.error("❌ Không thể lưu! Vui lòng nhập đầy đủ thông tin thời gian hợp lệ (Giờ bắt đầu và Giờ kết thúc)")
                         st.stop()
                     
+                    # Kiểm tra có chọn lô mô soi không
+                    if ma_lo_mo_soi is None:
+                        st.error(f"""
+                        ❌ **KHÔNG THỂ LƯU NHẬT KÝ!**
+                        
+                        **Lý do:** Không có Mô Soi cho giống **{ten_giong}**
+                        
+                        **Hành động:**
+                        1. Vào trang "Quản lý Mô Soi"
+                        2. Nhập kết quả kiểm tra từ chu kỳ trước
+                        3. Quay lại nhập nhật ký cấy
+                        """)
+                        st.stop()
+                    
+                    # Tính số cụm mô mẹ cần khấu trừ
+                    so_cum_mo_me_can_dung = so_tui_me * so_cum_tui_me
+                    
+                    # Khấu trừ mô soi
+                    success, message, so_cum_con_lai_sau_khau_tru = khau_tru_mo_soi(ma_lo_mo_soi, so_cum_mo_me_can_dung)
+                    
+                    if not success:
+                        st.error(f"""
+                        ❌ **KHÔNG THỂ KHẤU TRỪ MÔ SOI!**
+                        
+                        {message}
+                        
+                        **Hành động:**
+                        - Giảm số túi mẹ hoặc số cụm/túi
+                        - Hoặc nhập thêm Mô Soi cho giống này
+                        """)
+                        st.stop()
+                    
                     ngay_tao = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     
                     conn = sqlite3.connect('data.db')
@@ -1846,8 +2134,8 @@ else:
                                 ngay_cay, thang, tuan, nhan_vien, ma_nhan_vien, ten_giong, chu_ky, tinh_trang,
                                 box_cay, ma_so_moi_truong_me, ma_so_moi_truong_con,
                                 so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
-                                tong_so_cay_con, gio_bat_dau, gio_ket_thuc, tong_gio_lam, nang_suat, ghi_chu, ma_qr, ngay_tao
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                tong_so_cay_con, gio_bat_dau, gio_ket_thuc, tong_gio_lam, nang_suat, ghi_chu, ma_qr, ma_lo_mo_soi, ngay_tao
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             ngay_cay.strftime("%Y-%m-%d"), thang, tuan,
                             user_info['ten_nhan_vien'], user_info['ma_nhan_vien'],
@@ -1856,7 +2144,7 @@ else:
                             so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
                             tong_so_cay_con,
                             gio_bat_dau.strftime("%H:%M"), gio_ket_thuc.strftime("%H:%M"),
-                            tong_gio_lam, nang_suat, ghi_chu, ma_qr_unique, ngay_tao
+                            tong_gio_lam, nang_suat, ghi_chu, ma_qr_unique, ma_lo_mo_soi, ngay_tao
                         ))
                         
                         # Lấy ID vừa tạo
@@ -1923,7 +2211,13 @@ else:
                         conn.close()
                         
                         # Hiển thị thông tin khấu trừ
-                        st.success("✅ Lưu dữ liệu thành công! Đã tự động tạo bản ghi trong phòng sáng.")
+                        st.success(f"""
+                        ✅ **LƯU DỮ LIỆU THÀNH CÔNG!**
+                        
+                        📋 Đã tự động tạo bản ghi trong phòng sáng
+                        🔬 Đã khấu trừ {so_cum_mo_me_can_dung} cụm từ lô Mô Soi **{ma_lo_mo_soi}**
+                        📊 Lô Mô Soi còn lại: **{so_cum_con_lai_sau_khau_tru} cụm**
+                        """)
                         
                         # Chi tiết môi trường đã xuất
                         with st.expander("📦 Chi tiết xuất môi trường từ kho (FIFO)"):
@@ -3172,6 +3466,405 @@ else:
             st.dataframe(styled_df_all, use_container_width=True, hide_index=True)
         else:
             st.info("ℹ️ Chưa có dữ liệu trong phòng sáng.")
+    
+    # ========== TRANG QUẢN LÝ MÔ SOI ==========
+    elif menu == "Quản lý Mô Soi":
+        st.header("🔬 Quản lý Mô Soi")
+        st.markdown("**Mô Soi** là kết quả kiểm tra từ chu kỳ trước (Phòng Sáng) - nguồn cung cấp Mô Mẹ cho chu kỳ tiếp theo")
+        st.markdown("---")
+        
+        tab1, tab2, tab3 = st.tabs(["📝 Nhập Mô Soi", "📊 Danh sách Mô Soi", "📈 Báo cáo Sử dụng"])
+        
+        # Tab 1: Nhập Mô Soi mới
+        with tab1:
+            st.subheader("📝 Nhập kết quả kiểm tra Mô Soi từ Phòng Sáng")
+            st.info("""
+            **Quy trình:**
+            1. Lấy kết quả kiểm tra từ chu kỳ trước ở Phòng Sáng
+            2. Đếm tổng số túi ban đầu, số túi nhiễm, số túi sạch
+            3. Nhập vào hệ thống để làm căn cứ cấp Mô Mẹ cho chu kỳ tiếp theo
+            """)
+            
+            danh_sach_ten_giong = get_danh_sach_ten_giong()
+            danh_sach_chu_ky = get_danh_sach_chu_ky()
+            
+            if len(danh_sach_ten_giong) == 0:
+                st.warning("⚠️ Vui lòng cập nhật danh mục Tên giống trước")
+            else:
+                with st.form("form_nhap_mo_soi", clear_on_submit=True):
+                    st.markdown("#### 🌱 Thông tin giống cây")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        ten_giong = st.selectbox(
+                            "Tên giống *",
+                            options=danh_sach_ten_giong,
+                            help="Tên giống cây đã kiểm tra"
+                        )
+                    
+                    with col2:
+                        chu_ky_truoc = st.selectbox(
+                            "Chu kỳ trước *",
+                            options=danh_sach_chu_ky if len(danh_sach_chu_ky) > 0 else ["Nhân nhanh", "Ra rễ"],
+                            help="Chu kỳ vừa hoàn thành ở phòng sáng"
+                        )
+                    
+                    st.markdown("#### 📅 Thời gian kiểm tra")
+                    ngay_soi = st.date_input(
+                        "Ngày kiểm tra (soi) *",
+                        value=date.today(),
+                        help="Ngày thực hiện kiểm tra mô soi"
+                    )
+                    
+                    st.markdown("#### 🔢 Kết quả kiểm tra")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        so_luong_ban_dau = st.number_input(
+                            "Tổng số túi ban đầu *",
+                            min_value=1,
+                            value=100,
+                            step=1,
+                            help="Tổng số túi đưa vào phòng sáng chu kỳ trước"
+                        )
+                    
+                    with col2:
+                        so_tui_nhiem = st.number_input(
+                            "Số túi nhiễm *",
+                            min_value=0,
+                            value=0,
+                            step=1,
+                            help="Tổng túi bị nấm, khuẩn (không dùng được)"
+                        )
+                    
+                    with col3:
+                        so_cum_moi_tui = st.number_input(
+                            "Số cụm mỗi túi sạch *",
+                            min_value=1,
+                            value=5,
+                            step=1,
+                            help="Số cụm trung bình trong mỗi túi sạch"
+                        )
+                    
+                    # Tính toán tự động
+                    so_tui_sach = so_luong_ban_dau - so_tui_nhiem
+                    tong_cum_sach = so_tui_sach * so_cum_moi_tui
+                    
+                    st.markdown("---")
+                    st.markdown("#### 📊 Kết quả tự động tính")
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Túi sạch", f"{so_tui_sach} túi")
+                    with col2:
+                        st.metric("Tổng cụm sạch", f"{tong_cum_sach} cụm")
+                    with col3:
+                        ty_le_sach = (so_tui_sach / so_luong_ban_dau * 100) if so_luong_ban_dau > 0 else 0
+                        st.metric("Tỷ lệ sạch", f"{ty_le_sach:.1f}%")
+                    with col4:
+                        ty_le_nhiem = (so_tui_nhiem / so_luong_ban_dau * 100) if so_luong_ban_dau > 0 else 0
+                        st.metric("Tỷ lệ nhiễm", f"{ty_le_nhiem:.1f}%")
+                    
+                    if ty_le_nhiem > 20:
+                        st.error(f"🔴 **CẢNH BÁO:** Tỷ lệ nhiễm cao ({ty_le_nhiem:.1f}%)! Cần kiểm tra quy trình.")
+                    elif ty_le_nhiem > 10:
+                        st.warning(f"⚠️ Tỷ lệ nhiễm hơi cao ({ty_le_nhiem:.1f}%), cần lưu ý.")
+                    
+                    st.markdown("---")
+                    st.markdown("#### 👤 Người thực hiện")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        nguoi_soi = st.text_input(
+                            "Tên nhân viên soi *",
+                            value=user_info['ten_nhan_vien'],
+                            help="Người thực hiện kiểm tra"
+                        )
+                    with col2:
+                        ma_nhan_vien_soi = st.text_input(
+                            "Mã nhân viên *",
+                            value=user_info['ma_nhan_vien'],
+                            help="Mã nhân viên"
+                        )
+                    
+                    ghi_chu = st.text_area(
+                        "Ghi chú",
+                        placeholder="Ví dụ: Kết quả kiểm tra lô cấy ngày 01/01/2026...",
+                        help="Thông tin bổ sung"
+                    )
+                    
+                    submitted = st.form_submit_button("💾 Lưu Mô Soi", use_container_width=True, type="primary")
+                    
+                    if submitted:
+                        if so_tui_sach <= 0:
+                            st.error("❌ Số túi sạch phải > 0. Vui lòng kiểm tra lại!")
+                        else:
+                            # Tạo mã lô mô soi
+                            ma_lo_mo_soi = tao_ma_lo_mo_soi()
+                            tuan_soi = int(ngay_soi.strftime('%U'))
+                            nam = ngay_soi.year
+                            
+                            # Lưu vào database
+                            conn = sqlite3.connect('data.db')
+                            c = conn.cursor()
+                            c.execute('''
+                                INSERT INTO mo_soi (
+                                    ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi, tuan_soi, nam,
+                                    so_luong_ban_dau, so_tui_nhiem, so_tui_sach, so_cum_moi_tui,
+                                    tong_cum_sach, so_cum_da_cap, so_cum_con_lai, trang_thai,
+                                    nguoi_soi, ma_nhan_vien, ghi_chu, ngay_tao, ngay_cap_nhat
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi.strftime('%Y-%m-%d'), 
+                                tuan_soi, nam, so_luong_ban_dau, so_tui_nhiem, so_tui_sach, 
+                                so_cum_moi_tui, tong_cum_sach, 0, tong_cum_sach, 'Đang sử dụng',
+                                nguoi_soi, ma_nhan_vien_soi, ghi_chu,
+                                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            ))
+                            conn.commit()
+                            conn.close()
+                            
+                            st.success(f"""
+                            ✅ **ĐÃ LƯU MÔ SOI THÀNH CÔNG!**
+                            
+                            📦 **Mã lô:** {ma_lo_mo_soi}
+                            🌱 **Giống:** {ten_giong}
+                            ✅ **Tổng cụm sạch:** {tong_cum_sach} cụm
+                            📊 **Tỷ lệ sạch:** {ty_le_sach:.1f}%
+                            
+                            ➡️ Lô này sẽ được dùng để cấp Mô Mẹ cho chu kỳ tiếp theo.
+                            """)
+                            st.balloons()
+                            st.rerun()
+        
+        # Tab 2: Danh sách Mô Soi
+        with tab2:
+            st.subheader("📊 Danh sách Mô Soi hiện có")
+            
+            conn = sqlite3.connect('data.db')
+            df = pd.read_sql_query('''
+                SELECT 
+                    ma_lo_mo_soi AS 'Mã lô',
+                    ten_giong AS 'Tên giống',
+                    chu_ky_truoc AS 'Chu kỳ trước',
+                    ngay_soi AS 'Ngày soi',
+                    so_luong_ban_dau AS 'Túi ban đầu',
+                    so_tui_nhiem AS 'Túi nhiễm',
+                    so_tui_sach AS 'Túi sạch',
+                    so_cum_moi_tui AS 'Cụm/túi',
+                    tong_cum_sach AS 'Tổng cụm',
+                    so_cum_da_cap AS 'Đã cấp',
+                    so_cum_con_lai AS 'Còn lại',
+                    trang_thai AS 'Trạng thái',
+                    nguoi_soi AS 'Người soi'
+                FROM mo_soi
+                ORDER BY ngay_soi DESC
+            ''', conn)
+            conn.close()
+            
+            if len(df) > 0:
+                # Metrics tổng quan
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    tong_lo_dang_su_dung = len(df[df['Trạng thái'] == 'Đang sử dụng'])
+                    st.metric("Lô đang sử dụng", tong_lo_dang_su_dung)
+                with col2:
+                    tong_cum_con_lai = df[df['Trạng thái'] == 'Đang sử dụng']['Còn lại'].sum()
+                    st.metric("Tổng cụm còn lại", f"{tong_cum_con_lai:,}")
+                with col3:
+                    tong_cum_da_cap = df['Đã cấp'].sum()
+                    st.metric("Tổng cụm đã cấp", f"{tong_cum_da_cap:,}")
+                with col4:
+                    lo_ket_thuc = len(df[df['Trạng thái'] == 'Đã kết thúc chu kỳ'])
+                    st.metric("Lô đã kết thúc", lo_ket_thuc)
+                
+                st.markdown("---")
+                
+                # Styling cho bảng
+                def highlight_trang_thai(row):
+                    if row['Trạng thái'] == 'Đang sử dụng':
+                        if row['Còn lại'] > 0:
+                            return ['background-color: #d4edda'] * len(row)  # Xanh lá
+                        else:
+                            return ['background-color: #fff3cd'] * len(row)  # Vàng
+                    elif row['Trạng thái'] == 'Đã kết thúc chu kỳ':
+                        return ['background-color: #f8d7da'] * len(row)  # Đỏ nhạt
+                    return [''] * len(row)
+                
+                styled_df = df.style.apply(highlight_trang_thai, axis=1)
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                
+                # Download
+                st.download_button(
+                    "📥 Tải xuống Excel",
+                    data=df.to_csv(index=False).encode('utf-8-sig'),
+                    file_name=f"mo_soi_{date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("ℹ️ Chưa có dữ liệu mô soi. Vui lòng nhập ở tab 'Nhập Mô Soi'.")
+        
+        # Tab 3: Báo cáo sử dụng
+        with tab3:
+            st.subheader("📈 Báo cáo Sử dụng Mô Soi")
+            
+            conn = sqlite3.connect('data.db')
+            
+            # Thống kê theo giống
+            df_stats = pd.read_sql_query('''
+                SELECT 
+                    ten_giong,
+                    COUNT(*) AS so_lo,
+                    SUM(tong_cum_sach) AS tong_cum,
+                    SUM(so_cum_da_cap) AS da_cap,
+                    SUM(so_cum_con_lai) AS con_lai,
+                    ROUND(AVG(CAST(so_tui_nhiem AS FLOAT) / so_luong_ban_dau * 100), 1) AS ty_le_nhiem_tb
+                FROM mo_soi
+                GROUP BY ten_giong
+                ORDER BY tong_cum DESC
+            ''', conn)
+            
+            conn.close()
+            
+            if len(df_stats) > 0:
+                st.markdown("#### 📊 Thống kê theo giống")
+                
+                col1, col2 = st.columns([2, 1])
+                
+                with col1:
+                    # Bar chart
+                    import plotly.graph_objects as go
+                    
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        name='Đã cấp',
+                        x=df_stats['ten_giong'],
+                        y=df_stats['da_cap'],
+                        marker_color='#28a745'
+                    ))
+                    fig.add_trace(go.Bar(
+                        name='Còn lại',
+                        x=df_stats['ten_giong'],
+                        y=df_stats['con_lai'],
+                        marker_color='#ffc107'
+                    ))
+                    
+                    fig.update_layout(
+                        title="Mô Soi: Đã cấp vs Còn lại",
+                        xaxis_title="Tên giống",
+                        yaxis_title="Số cụm",
+                        barmode='stack',
+                        height=400
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    st.markdown("**Chi tiết:**")
+                    st.dataframe(df_stats, use_container_width=True, hide_index=True)
+            else:
+                st.info("ℹ️ Chưa có dữ liệu để thống kê.")
+    
+    # ========== TRANG ĐỐI SOÁT MÔ SOI ==========
+    elif menu == "Đối soát Mô Soi":
+        st.header("🔍 Đối soát Mô Soi vs Mô Mẹ đã cấy")
+        st.markdown("**Check & Balance:** Kiểm tra tổng Mô Soi có khớp với tổng Mô Mẹ đã cấy hay không")
+        st.markdown("---")
+        
+        df_doi_soat = get_bao_cao_doi_soat_mo_soi()
+        
+        if len(df_doi_soat) > 0:
+            # Metrics tổng quan
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                tong_khop = len(df_doi_soat[df_doi_soat['trang_thai'].str.contains('KHỚP')])
+                st.metric("✅ Giống khớp", tong_khop, help="Mô soi = Mô mẹ đã cấy")
+            
+            with col2:
+                tong_du = len(df_doi_soat[df_doi_soat['trang_thai'].str.contains('DƯ MÔ')])
+                st.metric("⚠️ Giống dư mô", tong_du, help="Còn mô soi chưa cấy")
+            
+            with col3:
+                tong_bat_thuong = len(df_doi_soat[df_doi_soat['trang_thai'].str.contains('BẤT THƯỜNG')])
+                st.metric("🔴 Giống bất thường", tong_bat_thuong, help="Mô mẹ đã cấy > Mô soi!")
+            
+            st.markdown("---")
+            
+            # Hiển thị bảng đối soát
+            st.markdown("### 📋 Bảng đối soát chi tiết")
+            
+            df_display = df_doi_soat.rename(columns={
+                'ten_giong': 'Tên giống',
+                'tong_cum_mo_soi': 'Tổng cụm Mô Soi',
+                'tong_cum_da_cap': 'Đã cấp (theo hệ thống)',
+                'tong_cum_con_lai': 'Còn lại',
+                'tong_cum_me_da_cay': 'Mô Mẹ đã cấy (theo nhật ký)',
+                'chenh_lech': 'Chênh lệch',
+                'trang_thai': 'Trạng thái'
+            })
+            
+            # Styling
+            def highlight_doi_soat(row):
+                if '🔴 BẤT THƯỜNG' in str(row['Trạng thái']):
+                    return ['background-color: #f8d7da; font-weight: bold'] * len(row)
+                elif '⚠️ DƯ MÔ' in str(row['Trạng thái']):
+                    return ['background-color: #fff3cd'] * len(row)
+                elif '✅ KHỚP' in str(row['Trạng thái']):
+                    return ['background-color: #d4edda'] * len(row)
+                return [''] * len(row)
+            
+            styled_df = df_display.style.apply(highlight_doi_soat, axis=1)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            
+            # Cảnh báo nếu có bất thường
+            if tong_bat_thuong > 0:
+                st.error(f"""
+                🚨 **CẢNH BÁO NGHIÊM TRỌNG!**
+                
+                Có {tong_bat_thuong} giống có dữ liệu bất thường:
+                - Tổng Mô Mẹ đã cấy > Tổng Mô Soi có sẵn
+                - Điều này không thể xảy ra trong thực tế!
+                
+                **Nguyên nhân có thể:**
+                1. Nhân viên nhập nhật ký nhưng không chọn đúng lô Mô Soi
+                2. Lô Mô Soi chưa được nhập vào hệ thống
+                3. Dữ liệu nhập sai
+                
+                **Hành động:**
+                - Kiểm tra lại nhật ký cấy của từng nhân viên
+                - Xác nhận lại số liệu với phòng sáng
+                """)
+            
+            if tong_du > 0:
+                st.warning(f"""
+                ⚠️ **LƯU Ý:**
+                
+                Có {tong_du} giống còn dư Mô Soi chưa cấy hết.
+                
+                **Gợi ý:**
+                - Đẩy nhanh tiến độ cấy
+                - Kiểm tra chất lượng mô soi còn lại
+                - Cân nhắc hủy bỏ nếu để quá lâu
+                """)
+            
+            # Download
+            st.download_button(
+                "📥 Tải báo cáo đối soát",
+                data=df_display.to_csv(index=False).encode('utf-8-sig'),
+                file_name=f"doi_soat_mo_soi_{date.today().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("""
+            ℹ️ **Chưa có dữ liệu để đối soát**
+            
+            Để sử dụng tính năng này:
+            1. Nhập dữ liệu Mô Soi ở trang "Quản lý Mô Soi"
+            2. Liên kết Mô Soi với nhật ký cấy (chọn lô Mô Soi khi nhập nhật ký)
+            3. Hệ thống sẽ tự động đối soát
+            """)
     
     # ========== TRANG QUẢN LÝ KHO MÔI TRƯỜNG ==========
     elif menu == "Quản lý Kho Môi trường":
