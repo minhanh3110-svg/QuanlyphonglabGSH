@@ -4378,163 +4378,247 @@ else:
             st.subheader("📝 Nhập kết quả kiểm tra Mô Soi từ Phòng Sáng")
             st.info("""
             **Quy trình:**
-            1. Lấy kết quả kiểm tra từ chu kỳ trước ở Phòng Sáng
-            2. Đếm tổng số túi ban đầu, số túi nhiễm, số túi sạch
-            3. Nhập vào hệ thống để làm căn cứ cấp Mô Mẹ cho chu kỳ tiếp theo
+            1. **Chọn lô cấy** từ Phòng Sáng (đã nhập trước đó)
+            2. Hệ thống tự động điền thông tin: Giống, Chu kỳ, Ngày/Tuần/Tháng cấy, Nhân viên, Số túi
+            3. Admin chỉ cần nhập: **Số túi nhiễm** và **Số cụm/túi sạch**
             """)
             
-            danh_sach_ten_giong = get_danh_sach_ten_giong()
-            danh_sach_chu_ky = get_danh_sach_chu_ky()
+            # Query danh sách lô từ Phòng Sáng (chưa được kiểm tra thành Mô Soi)
+            conn = sqlite3.connect('data.db')
+            df_phong_sang = pd.read_sql_query('''
+                SELECT DISTINCT
+                    ps.id,
+                    ps.id_nhat_ky_cay,
+                    ps.ten_giong,
+                    ps.chu_ky,
+                    ps.ngay_cay,
+                    ps.nhan_vien,
+                    ps.ma_nhan_vien,
+                    nk.tuan AS tuan_cay,
+                    nk.thang AS thang_cay,
+                    ps.tong_tui_sach + ps.tong_tui_khuan + ps.tong_tui_huy AS tong_so_tui,
+                    ps.tong_tui_sach,
+                    ps.tong_tui_khuan,
+                    ps.tong_tui_huy,
+                    ps.trang_thai
+                FROM quan_ly_phong_sang ps
+                LEFT JOIN nhat_ky_cay nk ON ps.id_nhat_ky_cay = nk.id
+                WHERE ps.id_nhat_ky_cay NOT IN (
+                    SELECT id_nhat_ky_cay FROM mo_soi WHERE id_nhat_ky_cay IS NOT NULL
+                )
+                ORDER BY ps.ngay_cay DESC
+                LIMIT 100
+            ''', conn)
+            conn.close()
             
-            if len(danh_sach_ten_giong) == 0:
-                st.warning("⚠️ Vui lòng cập nhật danh mục Tên giống trước")
+            if len(df_phong_sang) == 0:
+                st.warning("""
+                ⚠️ **Không có lô nào từ Phòng Sáng để kiểm tra.**
+                
+                Vui lòng:
+                1. Nhập Nhật ký cấy trước
+                2. Đợi lô cấy chuyển sang Phòng Sáng
+                3. Quay lại đây để nhập kết quả kiểm tra Mô Soi
+                """)
             else:
-                with st.form("form_nhap_mo_soi", clear_on_submit=True):
-                    st.markdown("#### 🌱 Thông tin giống cây")
+                # Tạo dictionary để map
+                dict_phong_sang = {}
+                danh_sach_lua_chon = []
+                
+                for idx, row in df_phong_sang.iterrows():
+                    label = f"{row['ten_giong']} - {row['chu_ky']} - Ngày: {row['ngay_cay']} - NV: {row['nhan_vien']} ({row['tong_so_tui']} túi)"
+                    danh_sach_lua_chon.append(label)
+                    dict_phong_sang[label] = row
+                
+                # Form nhập
+                with st.form("form_nhap_mo_soi", clear_on_submit=False):
+                    st.markdown("#### 🎯 Chọn lô cấy từ Phòng Sáng")
                     
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        ten_giong = st.selectbox(
-                            "Tên giống *",
-                            options=danh_sach_ten_giong,
-                            help="Tên giống cây đã kiểm tra"
-                        )
-                    
-                    with col2:
-                        chu_ky_truoc = st.selectbox(
-                            "Chu kỳ trước *",
-                            options=danh_sach_chu_ky if len(danh_sach_chu_ky) > 0 else ["Nhân nhanh", "Ra rễ"],
-                            help="Chu kỳ vừa hoàn thành ở phòng sáng"
-                        )
-                    
-                    st.markdown("#### 📅 Thời gian kiểm tra")
-                    ngay_soi = st.date_input(
-                        "Ngày kiểm tra (soi) *",
-                        value=date.today(),
-                        help="Ngày thực hiện kiểm tra mô soi"
+                    lo_chon = st.selectbox(
+                        "Chọn lô cần kiểm tra *",
+                        options=danh_sach_lua_chon,
+                        help="Chọn lô cấy đã hoàn thành chu kỳ trong Phòng Sáng"
                     )
                     
-                    st.markdown("#### 🔢 Kết quả kiểm tra")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        so_luong_ban_dau = st.number_input(
-                            "Tổng số túi ban đầu *",
-                            min_value=1,
-                            value=100,
-                            step=1,
-                            help="Tổng số túi đưa vào phòng sáng chu kỳ trước"
-                        )
-                    
-                    with col2:
-                        so_tui_nhiem = st.number_input(
-                            "Số túi nhiễm *",
-                            min_value=0,
-                            value=0,
-                            step=1,
-                            help="Tổng túi bị nấm, khuẩn (không dùng được)"
-                        )
-                    
-                    with col3:
-                        so_cum_moi_tui = st.number_input(
-                            "Số cụm mỗi túi sạch *",
-                            min_value=1,
-                            value=5,
-                            step=1,
-                            help="Số cụm trung bình trong mỗi túi sạch"
-                        )
-                    
-                    # Tính toán tự động
-                    so_tui_sach = so_luong_ban_dau - so_tui_nhiem
-                    tong_cum_sach = so_tui_sach * so_cum_moi_tui
-                    
-                    st.markdown("---")
-                    st.markdown("#### 📊 Kết quả tự động tính")
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("Túi sạch", f"{so_tui_sach} túi")
-                    with col2:
-                        st.metric("Tổng cụm sạch", f"{tong_cum_sach} cụm")
-                    with col3:
-                        ty_le_sach = (so_tui_sach / so_luong_ban_dau * 100) if so_luong_ban_dau > 0 else 0
-                        st.metric("Tỷ lệ sạch", f"{ty_le_sach:.1f}%")
-                    with col4:
-                        ty_le_nhiem = (so_tui_nhiem / so_luong_ban_dau * 100) if so_luong_ban_dau > 0 else 0
-                        st.metric("Tỷ lệ nhiễm", f"{ty_le_nhiem:.1f}%")
-                    
-                    if ty_le_nhiem > 20:
-                        st.error(f"🔴 **CẢNH BÁO:** Tỷ lệ nhiễm cao ({ty_le_nhiem:.1f}%)! Cần kiểm tra quy trình.")
-                    elif ty_le_nhiem > 10:
-                        st.warning(f"⚠️ Tỷ lệ nhiễm hơi cao ({ty_le_nhiem:.1f}%), cần lưu ý.")
-                    
-                    st.markdown("---")
-                    st.markdown("#### 👤 Người thực hiện")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        nguoi_soi = st.text_input(
-                            "Tên nhân viên soi *",
-                            value=user_info['ten_nhan_vien'],
-                            help="Người thực hiện kiểm tra"
-                        )
-                    with col2:
-                        ma_nhan_vien_soi = st.text_input(
-                            "Mã nhân viên *",
-                            value=user_info['ma_nhan_vien'],
-                            help="Mã nhân viên"
-                        )
-                    
-                    ghi_chu = st.text_area(
-                        "Ghi chú",
-                        placeholder="Ví dụ: Kết quả kiểm tra lô cấy ngày 01/01/2026...",
-                        help="Thông tin bổ sung"
-                    )
-                    
-                    submitted = st.form_submit_button("💾 Lưu Mô Soi", use_container_width=True, type="primary")
-                    
-                    if submitted:
-                        if so_tui_sach <= 0:
-                            st.error("❌ Số túi sạch phải > 0. Vui lòng kiểm tra lại!")
-                        else:
-                            # Tạo mã lô mô soi
-                            ma_lo_mo_soi = tao_ma_lo_mo_soi()
-                            tuan_soi = int(ngay_soi.strftime('%U'))
-                            nam = ngay_soi.year
+                    # Lấy thông tin lô đã chọn
+                    if lo_chon:
+                        thong_tin_lo = dict_phong_sang[lo_chon]
+                        
+                        st.markdown("---")
+                        st.markdown("#### 📋 Thông tin lô đã chọn (Tự động từ Phòng Sáng)")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.info(f"""
+                            **🌱 Giống:** {thong_tin_lo['ten_giong']}
                             
-                            # Lưu vào database
-                            conn = sqlite3.connect('data.db')
-                            c = conn.cursor()
-                            c.execute('''
-                                INSERT INTO mo_soi (
-                                    ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi, tuan_soi, nam,
-                                    so_luong_ban_dau, so_tui_nhiem, so_tui_sach, so_cum_moi_tui,
-                                    tong_cum_sach, so_cum_da_cap, so_cum_con_lai, trang_thai,
-                                    nguoi_soi, ma_nhan_vien, ghi_chu, ngay_tao, ngay_cap_nhat
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            ''', (
-                                ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi.strftime('%Y-%m-%d'), 
-                                tuan_soi, nam, so_luong_ban_dau, so_tui_nhiem, so_tui_sach, 
-                                so_cum_moi_tui, tong_cum_sach, 0, tong_cum_sach, 'Đang sử dụng',
-                                nguoi_soi, ma_nhan_vien_soi, ghi_chu,
-                                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                            ))
-                            conn.commit()
-                            conn.close()
-                            
-                            st.success(f"""
-                            ✅ **ĐÃ LƯU MÔ SOI THÀNH CÔNG!**
-                            
-                            📦 **Mã lô:** {ma_lo_mo_soi}
-                            🌱 **Giống:** {ten_giong}
-                            ✅ **Tổng cụm sạch:** {tong_cum_sach} cụm
-                            📊 **Tỷ lệ sạch:** {ty_le_sach:.1f}%
-                            
-                            ➡️ Lô này sẽ được dùng để cấp Mô Mẹ cho chu kỳ tiếp theo.
+                            **🔄 Chu kỳ:** {thong_tin_lo['chu_ky']}
                             """)
-                            st.balloons()
-                            st.rerun()
+                        with col2:
+                            st.info(f"""
+                            **📅 Ngày cấy:** {thong_tin_lo['ngay_cay']}
+                            
+                            **📊 Tuần {thong_tin_lo['tuan_cay']} / Tháng {thong_tin_lo['thang_cay']}**
+                            """)
+                        with col3:
+                            st.info(f"""
+                            **👤 Nhân viên:** {thong_tin_lo['nhan_vien']}
+                            
+                            **📦 Tổng túi:** {int(thong_tin_lo['tong_so_tui'])} túi
+                            """)
+                        
+                        # Hiển thị chi tiết tình trạng từ phòng sáng
+                        with st.expander("📊 Chi tiết tình trạng từ Phòng Sáng"):
+                            col_a, col_b, col_c = st.columns(3)
+                            with col_a:
+                                st.metric("✅ Túi sạch", f"{int(thong_tin_lo['tong_tui_sach'])} túi")
+                            with col_b:
+                                st.metric("⚠️ Túi khuẩn", f"{int(thong_tin_lo['tong_tui_khuan'])} túi")
+                            with col_c:
+                                st.metric("❌ Túi hủy", f"{int(thong_tin_lo['tong_tui_huy'])} túi")
+                        
+                        st.markdown("---")
+                        st.markdown("#### 📅 Thông tin kiểm tra")
+                        ngay_soi = st.date_input(
+                            "Ngày kiểm tra (soi) *",
+                            value=date.today(),
+                            help="Ngày thực hiện kiểm tra mô soi"
+                        )
+                        
+                        st.markdown("---")
+                        st.markdown("#### 🔢 Kết quả kiểm tra (Admin nhập)")
+                        
+                        # Số túi ban đầu tự động = tổng số túi từ phòng sáng
+                        so_luong_ban_dau = int(thong_tin_lo['tong_so_tui'])
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            so_tui_nhiem = st.number_input(
+                                "Số túi nhiễm (Nấm + Khuẩn nặng) *",
+                                min_value=0,
+                                max_value=so_luong_ban_dau,
+                                value=int(thong_tin_lo['tong_tui_khuan'] + thong_tin_lo['tong_tui_huy']) if (thong_tin_lo['tong_tui_khuan'] + thong_tin_lo['tong_tui_huy']) > 0 else 0,
+                                step=1,
+                                help="Tổng túi bị nấm, khuẩn nặng (không dùng được)"
+                            )
+                        
+                        with col2:
+                            so_cum_moi_tui = st.number_input(
+                                "Số cụm mỗi túi sạch *",
+                                min_value=1,
+                                value=5,
+                                step=1,
+                                help="Số cụm trung bình trong mỗi túi sạch"
+                            )
+                        
+                        # Tính toán tự động
+                        so_tui_sach = so_luong_ban_dau - so_tui_nhiem
+                        tong_cum_sach = so_tui_sach * so_cum_moi_tui
+                        
+                        st.markdown("---")
+                        st.markdown("#### 📊 Kết quả tự động tính")
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("Túi sạch", f"{so_tui_sach} túi")
+                        with col2:
+                            st.metric("Tổng cụm sạch", f"{tong_cum_sach} cụm")
+                        with col3:
+                            ty_le_sach = (so_tui_sach / so_luong_ban_dau * 100) if so_luong_ban_dau > 0 else 0
+                            st.metric("Tỷ lệ sạch", f"{ty_le_sach:.1f}%")
+                        with col4:
+                            ty_le_nhiem = (so_tui_nhiem / so_luong_ban_dau * 100) if so_luong_ban_dau > 0 else 0
+                            st.metric("Tỷ lệ nhiễm", f"{ty_le_nhiem:.1f}%")
+                        
+                        if ty_le_nhiem > 20:
+                            st.error(f"🔴 **CẢNH BÁO:** Tỷ lệ nhiễm cao ({ty_le_nhiem:.1f}%)! Cần kiểm tra quy trình.")
+                        elif ty_le_nhiem > 10:
+                            st.warning(f"⚠️ Tỷ lệ nhiễm hơi cao ({ty_le_nhiem:.1f}%), cần lưu ý.")
+                        
+                        st.markdown("---")
+                        st.markdown("#### 👤 Người thực hiện kiểm tra")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            nguoi_soi = st.text_input(
+                                "Tên nhân viên soi *",
+                                value=user_info['ten_nhan_vien'],
+                                help="Người thực hiện kiểm tra"
+                            )
+                        with col2:
+                            ma_nhan_vien_soi = st.text_input(
+                                "Mã nhân viên *",
+                                value=user_info['ma_nhan_vien'],
+                                help="Mã nhân viên"
+                            )
+                        
+                        ghi_chu = st.text_area(
+                            "Ghi chú",
+                            placeholder="Ví dụ: Kết quả kiểm tra lô cấy ngày 01/01/2026...",
+                            help="Thông tin bổ sung"
+                        )
+                        
+                        submitted = st.form_submit_button("💾 Lưu Mô Soi", use_container_width=True, type="primary")
+                        
+                        if submitted:
+                            if so_tui_sach <= 0:
+                                st.error("❌ Số túi sạch phải > 0. Vui lòng kiểm tra lại!")
+                            else:
+                                # Lấy thông tin từ lô đã chọn
+                                ten_giong = thong_tin_lo['ten_giong']
+                                chu_ky_truoc = thong_tin_lo['chu_ky']
+                                id_nhat_ky_cay = int(thong_tin_lo['id_nhat_ky_cay'])
+                                
+                                # Tạo mã lô mô soi
+                                ma_lo_mo_soi = tao_ma_lo_mo_soi()
+                                tuan_soi = int(ngay_soi.strftime('%U'))
+                                nam = ngay_soi.year
+                                
+                                # Lưu vào database
+                                conn = sqlite3.connect('data.db')
+                                c = conn.cursor()
+                                
+                                # Thêm cột id_nhat_ky_cay nếu chưa có
+                                try:
+                                    c.execute("ALTER TABLE mo_soi ADD COLUMN id_nhat_ky_cay INTEGER")
+                                    conn.commit()
+                                except:
+                                    pass
+                                
+                                c.execute('''
+                                    INSERT INTO mo_soi (
+                                        ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi, tuan_soi, nam,
+                                        so_luong_ban_dau, so_tui_nhiem, so_tui_sach, so_cum_moi_tui,
+                                        tong_cum_sach, so_cum_da_cap, so_cum_con_lai, trang_thai,
+                                        nguoi_soi, ma_nhan_vien, ghi_chu, ngay_tao, ngay_cap_nhat,
+                                        id_nhat_ky_cay
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ''', (
+                                    ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi.strftime('%Y-%m-%d'), 
+                                    tuan_soi, nam, so_luong_ban_dau, so_tui_nhiem, so_tui_sach, 
+                                    so_cum_moi_tui, tong_cum_sach, 0, tong_cum_sach, 'Đang sử dụng',
+                                    nguoi_soi, ma_nhan_vien_soi, ghi_chu,
+                                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    id_nhat_ky_cay
+                                ))
+                                conn.commit()
+                                conn.close()
+                                
+                                st.success(f"""
+                                ✅ **ĐÃ LƯU MÔ SOI THÀNH CÔNG!**
+                                
+                                📦 **Mã lô:** {ma_lo_mo_soi}
+                                🌱 **Giống:** {ten_giong} - **Chu kỳ:** {chu_ky_truoc}
+                                📅 **Ngày cấy:** {thong_tin_lo['ngay_cay']} - **NV cấy:** {thong_tin_lo['nhan_vien']}
+                                📊 **Tổng túi:** {so_luong_ban_dau} → **Nhiễm:** {so_tui_nhiem} → **Sạch:** {so_tui_sach}
+                                ✅ **Tổng cụm sạch:** {tong_cum_sach} cụm
+                                📈 **Tỷ lệ sạch:** {ty_le_sach:.1f}%
+                                
+                                ➡️ Lô này sẽ được dùng để cấp Mô Mẹ cho chu kỳ tiếp theo.
+                                """)
+                                st.balloons()
+                                st.rerun()
             
             # ===== HIỂN THỊ DANH SÁCH MÔ SOI ĐÃ NHẬP =====
             st.markdown("---")
