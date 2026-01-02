@@ -1225,17 +1225,25 @@ else:
                 st.markdown("---")
                 st.markdown("#### ⏰ Thời gian làm việc")
                 
-                gio_bat_dau = st.time_input(
-                    "Giờ bắt đầu *",
-                    value=datetime.now().time(),
-                    help="Thời gian bắt đầu làm việc"
-                )
+                # Tự động lấy thời gian hiện tại
+                current_time = datetime.now().time()
+                default_end_time = (datetime.now() + timedelta(hours=8)).time()
                 
-                gio_ket_thuc = st.time_input(
-                    "Giờ kết thúc *",
-                    value=datetime.now().time(),
-                    help="Thời gian kết thúc làm việc"
-                )
+                col_time1, col_time2 = st.columns(2)
+                
+                with col_time1:
+                    gio_bat_dau = st.time_input(
+                        "Giờ bắt đầu *",
+                        value=current_time,
+                        help="Tự động lấy giờ hiện tại. Bạn có thể chỉnh sửa nếu cần."
+                    )
+                
+                with col_time2:
+                    gio_ket_thuc = st.time_input(
+                        "Giờ kết thúc *",
+                        value=default_end_time,
+                        help="Mặc định +8 giờ. Bạn có thể chỉnh sửa."
+                    )
                 
                 st.markdown("---")
                 st.markdown("#### 📝 Ghi chú")
