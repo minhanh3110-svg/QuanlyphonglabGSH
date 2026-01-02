@@ -1383,13 +1383,10 @@ else:
                 st.markdown("---")
                 
                 # Nút submit với kiểm tra validation
-                col_submit, col_info = st.columns([3, 1])
-                with col_submit:
-                    submitted = st.form_submit_button("💾 LƯU DỮ LIỆU", use_container_width=True, type="primary")
+                if not thoi_gian_hop_le:
+                    st.warning("⚠️ Cần nhập đầy đủ thời gian hợp lệ trước khi lưu")
                 
-                with col_info:
-                    if not thoi_gian_hop_le:
-                        st.warning("⚠️", help="Cần nhập đầy đủ thời gian hợp lệ")
+                submitted = st.form_submit_button("💾 LƯU DỮ LIỆU", use_container_width=True, type="primary")
                 
                 if submitted:
                     # Kiểm tra thời gian hợp lệ trước khi lưu
