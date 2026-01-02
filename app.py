@@ -1165,69 +1165,60 @@ else:
                 
                 st.markdown("---")
                 st.markdown("#### ⏰ Thời gian làm việc cho giống này")
-                st.caption("(Vui lòng nhập giờ thực tế bắt đầu và kết thúc giống này)")
+                st.caption("(Vui lòng chọn hoặc nhập tay giờ thực tế - chính xác đến từng phút)")
                 
                 col_time1, col_time2 = st.columns(2)
                 
                 with col_time1:
-                    gio_bat_dau_str = st.text_input(
-                        "⏰ Giờ bắt đầu (HH:MM) *",
-                        value="",
-                        placeholder="VD: 08:00",
-                        help="Nhập giờ bắt đầu theo định dạng HH:MM (24 giờ)",
-                        key="gio_bd_input"
+                    gio_bat_dau = st.time_input(
+                        "⏰ Giờ bắt đầu *",
+                        value=None,
+                        help="Chọn hoặc nhập tay giờ bắt đầu (chính xác đến phút). Ví dụ: 08:23",
+                        key="gio_bd_time_input",
+                        step=60  # Bước nhảy 60 giây = 1 phút
                     )
                 
                 with col_time2:
-                    gio_ket_thuc_str = st.text_input(
-                        "⏰ Giờ kết thúc (HH:MM) *",
-                        value="",
-                        placeholder="VD: 12:00",
-                        help="Nhập giờ kết thúc theo định dạng HH:MM (24 giờ)",
-                        key="gio_kt_input"
+                    gio_ket_thuc = st.time_input(
+                        "⏰ Giờ kết thúc *",
+                        value=None,
+                        help="Chọn hoặc nhập tay giờ kết thúc (chính xác đến phút). Ví dụ: 12:47",
+                        key="gio_kt_time_input",
+                        step=60  # Bước nhảy 60 giây = 1 phút
                     )
                 
                 # Biến kiểm tra thời gian hợp lệ
                 thoi_gian_hop_le = False
-                gio_bat_dau = None
-                gio_ket_thuc = None
                 
                 # Validation và tính toán
-                if gio_bat_dau_str and gio_ket_thuc_str:
-                    try:
-                        # Kiểm tra định dạng HH:MM
-                        gio_bd_obj = datetime.strptime(gio_bat_dau_str.strip(), "%H:%M")
-                        gio_kt_obj = datetime.strptime(gio_ket_thuc_str.strip(), "%H:%M")
-                        
-                        # Convert sang time object
-                        gio_bat_dau = gio_bd_obj.time()
-                        gio_ket_thuc = gio_kt_obj.time()
-                        
-                        # Kiểm tra giờ kết thúc > giờ bắt đầu
-                        if gio_ket_thuc <= gio_bat_dau:
-                            st.error("⚠️ Giờ kết thúc phải lớn hơn giờ bắt đầu")
-                            thoi_gian_hop_le = False
-                        else:
-                            # Tính tổng giờ làm chính xác đến phút
-                            tong_gio_temp = tinh_tong_gio_lam(gio_bat_dau_str.strip(), gio_ket_thuc_str.strip())
-                            
-                            if tong_gio_temp > 0:
-                                st.success(f"✅ Thời gian làm việc: **{tong_gio_temp:.2f} giờ** ({int(tong_gio_temp * 60)} phút)")
-                                thoi_gian_hop_le = True
-                            else:
-                                st.error("⚠️ Thời gian làm việc không hợp lệ")
-                                thoi_gian_hop_le = False
-                                
-                    except ValueError:
-                        st.error("❌ Định dạng giờ không đúng! Vui lòng nhập theo HH:MM (ví dụ: 08:00, 14:30)")
+                if gio_bat_dau is not None and gio_ket_thuc is not None:
+                    # Kiểm tra giờ kết thúc > giờ bắt đầu
+                    if gio_ket_thuc <= gio_bat_dau:
+                        st.error("⚠️ Giờ kết thúc phải lớn hơn giờ bắt đầu")
                         thoi_gian_hop_le = False
-                elif gio_bat_dau_str or gio_ket_thuc_str:
+                    else:
+                        # Tính tổng giờ làm chính xác đến từng phút
+                        # Chuyển đổi time object sang string để dùng hàm tinh_tong_gio_lam
+                        gio_bat_dau_str = gio_bat_dau.strftime("%H:%M")
+                        gio_ket_thuc_str = gio_ket_thuc.strftime("%H:%M")
+                        tong_gio_temp = tinh_tong_gio_lam(gio_bat_dau_str, gio_ket_thuc_str)
+                        
+                        if tong_gio_temp > 0:
+                            # Tính số phút chính xác
+                            tong_phut = int(tong_gio_temp * 60)
+                            st.success(f"✅ Thời gian làm việc: **{tong_gio_temp:.2f} giờ** ({tong_phut} phút)")
+                            thoi_gian_hop_le = True
+                        else:
+                            st.error("⚠️ Thời gian làm việc không hợp lệ")
+                            thoi_gian_hop_le = False
+                            
+                elif gio_bat_dau is not None or gio_ket_thuc is not None:
                     # Chỉ nhập 1 trong 2
                     st.warning("⚠️ Vui lòng nhập đầy đủ cả giờ bắt đầu và giờ kết thúc")
                     thoi_gian_hop_le = False
                 else:
                     # Chưa nhập gì
-                    st.info("💡 Vui lòng nhập thời gian bắt đầu và kết thúc làm việc")
+                    st.info("💡 Vui lòng chọn hoặc nhập tay thời gian bắt đầu và kết thúc (click vào ô để nhập)")
                     thoi_gian_hop_le = False
                 
                 # Nếu không hợp lệ, set giá trị mặc định để tránh lỗi (sẽ không cho submit)
@@ -1371,34 +1362,25 @@ else:
                 
                 st.markdown("---")
                 
-                col3, col4 = st.columns(2)
-                
-                with col3:
-                    st.markdown("#### ⏰ Thời gian làm việc")
-                    gio_bat_dau = st.time_input(
-                        "Giờ bắt đầu *",
-                        value=datetime.now().time()
-                    )
-                    
-                    gio_ket_thuc = st.time_input(
-                        "Giờ kết thúc *",
-                        value=(datetime.now() + timedelta(hours=8)).time()
-                    )
-                
-                with col4:
-                    st.markdown("#### 📝 Ghi chú")
-                    ghi_chu = st.text_area(
-                        "Ghi chú",
-                        placeholder="Nhập ghi chú nếu có...",
-                        height=100
-                    )
-                
-                # Tính toán tự động
-                tong_so_cay_con = so_tui_con * so_cum_tui_con
-                tong_gio_lam = tinh_tong_gio_lam(
-                    gio_bat_dau.strftime("%H:%M"),
-                    gio_ket_thuc.strftime("%H:%M")
+                st.markdown("#### 📝 Ghi chú")
+                ghi_chu = st.text_area(
+                    "Ghi chú",
+                    placeholder="Nhập ghi chú nếu có...",
+                    height=100
                 )
+                
+                # Tính toán năng suất
+                tong_so_cay_con = so_tui_con * so_cum_tui_con
+                
+                # Tính tổng giờ làm chính xác
+                if thoi_gian_hop_le:
+                    tong_gio_lam = tinh_tong_gio_lam(
+                        gio_bat_dau.strftime("%H:%M"),
+                        gio_ket_thuc.strftime("%H:%M")
+                    )
+                else:
+                    tong_gio_lam = 0
+                
                 nang_suat = tong_so_cay_con / tong_gio_lam if tong_gio_lam > 0 else 0
                 
                 st.markdown("---")
