@@ -2336,33 +2336,9 @@ else:
                     help="Số lượng box cấy"
                 )
                 
-                st.markdown("---")
-                st.markdown("#### 📝 Ghi chú & Giàn cây")
-                
-                ghi_chu = st.text_area(
-                    "Ghi chú",
-                    placeholder="Nhập ghi chú nếu có...",
-                    height=80,
-                    help="Thông tin bổ sung"
-                )
-                
-                # Lấy danh sách giàn/kệ từ database
-                danh_sach_gian_ke = get_danh_sach_gian_ke()
-                
-                if len(danh_sach_gian_ke) > 0:
-                    so_gian_ke = st.selectbox(
-                        "Số Giàn/Kệ *",
-                        options=danh_sach_gian_ke,
-                        help="Chọn giàn/kệ từ danh sách (Quản lý tại 'Quản lý danh mục')"
-                    )
-                else:
-                    st.warning("⚠️ Chưa có giàn/kệ nào. Vui lòng thêm tại 'Quản lý danh mục' → 'Giàn/Kệ Phòng Sáng'")
-                    so_gian_ke = st.text_input(
-                        "Số Giàn/Kệ (tạm thời) *",
-                        placeholder="Ví dụ: Giàn A1, Kệ B2...",
-                        value=f"Giàn {box_cay}",
-                        help="Nhập tạm - Nên thêm vào danh mục để dễ quản lý"
-                    )
+                # Giá trị mặc định cho Ghi chú và Giàn/Kệ
+                ghi_chu = ""
+                so_gian_ke = f"Giàn {box_cay}"
                 
                 st.markdown("---")
                 st.markdown("#### 🧪 Thông tin môi trường")
