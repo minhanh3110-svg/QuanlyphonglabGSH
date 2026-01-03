@@ -310,6 +310,14 @@ def migrate_database():
             except:
                 pass
         
+        # Thêm cột ma_tinh_trang nếu chưa có (mã số 3 chữ số)
+        if 'ma_tinh_trang' not in columns:
+            try:
+                c.execute("ALTER TABLE nhat_ky_cay ADD COLUMN ma_tinh_trang INTEGER DEFAULT 301")
+                conn.commit()
+            except:
+                pass
+        
         # Nếu không có cột ngay_cay hoặc ma_so_moi_truong_me, đây là cấu trúc cũ
         if 'ngay_cay' not in columns or 'ma_so_moi_truong_me' not in columns:
             # Backup dữ liệu cũ nếu có
@@ -2224,50 +2232,78 @@ else:
                     help="Chọn chu kỳ cấy"
                 )
                 
-                # Tạo format hiển thị cho tình trạng
-                tinh_trang_options = {}
-                for ma, ten in dict_tinh_trang.items():
-                    loai, color, icon = phan_loai_tinh_trang(ma)
-                    if loai == 'sach':
-                        label = f"{icon} {ten} (Mã {ma})"
-                    elif loai == 'khuan':
-                        label = f"{icon} {ten} (Mã {ma}) - Theo dõi"
-                    else:  # huy
-                        label = f"{icon} {ten} (Mã {ma}) - Hủy bỏ"
-                    tinh_trang_options[label] = ten
+                # THAY ĐỔI: Tình trạng đơn giản chỉ 2 lựa chọn
+                col_tinh_trang, col_ma = st.columns(2)
                 
-                tinh_trang_selected = st.selectbox(
-                    "Tình trạng *",
-                    options=list(tinh_trang_options.keys()),
-                    index=0,
-                    help="Chọn tình trạng cây. Mã cuối 3: Sạch | Mã cuối 5: Khuẩn (theo dõi) | Mã cuối 9: Hủy bỏ"
-                )
-                tinh_trang = tinh_trang_options[tinh_trang_selected]
+                with col_tinh_trang:
+                    tinh_trang = st.selectbox(
+                        "Tình trạng *",
+                        options=["Sạch", "Khuẩn"],
+                        index=0,
+                        help="Chọn tình trạng: Sạch hoặc Khuẩn"
+                    )
                 
-                # Hiển thị thông tin theo loại
-                ma_tinh_trang_hien_tai = get_ma_tinh_trang(tinh_trang)
-                loai, color, icon = phan_loai_tinh_trang(ma_tinh_trang_hien_tai)
-                
-                if loai == 'khuan':
-                    st.warning(f"""
-                    ⚠️ **CẢNH BÁO KHUẨN**
+                with col_ma:
+                    # Mã tình trạng theo chu kỳ
+                    # Mã có 3 chữ số: XYZ
+                    # X = 3: Chu kỳ Nhân, X = 2: Chu kỳ Giãn, X = 1: Chu kỳ Rễ
+                    # YZ = 01, 03, 05, 07, 09 (các trạng thái khác nhau)
                     
-                    Lô này có mã cuối **5** - Nhiễm khuẩn nhẹ
-                    - Vẫn lưu trong Phòng Sáng
-                    - Có thể sử dụng làm Mô Mẹ nhưng **cần theo dõi**
-                    - Ưu tiên xử lý trước khi lây lan
-                    """)
-                elif loai == 'huy':
-                    st.error(f"""
-                    🔴 **HỦY BỎ**
+                    # Xác định prefix dựa trên chu kỳ
+                    if "Nhân" in chu_ky or "nhan" in chu_ky.lower():
+                        prefix = "3"
+                        chu_ky_label = "Nhân"
+                    elif "Giãn" in chu_ky or "gian" in chu_ky.lower():
+                        prefix = "2"
+                        chu_ky_label = "Giãn"
+                    elif "Rễ" in chu_ky or "re" in chu_ky.lower():
+                        prefix = "1"
+                        chu_ky_label = "Rễ"
+                    else:
+                        prefix = "3"  # Mặc định
+                        chu_ky_label = "Khác"
                     
-                    Lô này có mã cuối **9** - Nấm/Khuẩn nặng
-                    - Sẽ bị **TRỪ THẲNG** khỏi kho Phòng Sáng
-                    - Tính vào tỷ lệ **THẤT THOÁT**
-                    - **KHÔNG** được dùng làm Mô Mẹ
-                    """)
-                elif loai == 'sach':
-                    st.success(f"✅ Lô sạch (Mã cuối **3**) - Chất lượng tốt")
+                    # Danh sách mã tình trạng
+                    ma_options = [
+                        f"{prefix}01 - Sạch chuẩn",
+                        f"{prefix}03 - Sạch tốt",
+                        f"{prefix}05 - Khuẩn nhẹ",
+                        f"{prefix}07 - Khuẩn vừa",
+                        f"{prefix}09 - Khuẩn nặng/Hủy"
+                    ]
+                    
+                    ma_tinh_trang_selected = st.selectbox(
+                        f"Mã tình trạng ({chu_ky_label}) *",
+                        options=ma_options,
+                        index=0 if tinh_trang == "Sạch" else 2,  # Mặc định 01 cho Sạch, 05 cho Khuẩn
+                        help=f"Mã tình trạng theo chu kỳ {chu_ky_label}"
+                    )
+                    
+                    # Lấy mã số từ chuỗi được chọn (3 chữ số đầu)
+                    ma_tinh_trang = int(ma_tinh_trang_selected.split(" - ")[0])
+                
+                # Hiển thị cảnh báo nếu chọn Khuẩn
+                if tinh_trang == "Khuẩn":
+                    if ma_tinh_trang % 10 == 9:  # Mã cuối 9: Hủy
+                        st.error(f"""
+🔴 **HỦY BỎ**
+
+Lô này có mã cuối **9** - Khuẩn nặng (Hủy bỏ)
+- Sẽ bị **TRỪ THẲNG** khỏi kho Phòng Sáng
+- Tính vào tỷ lệ **THẤT THOÁT**
+- **KHÔNG** được dùng làm Mô Mẹ
+                        """)
+                    else:  # Mã 05 hoặc 07: Khuẩn nhẹ/vừa
+                        st.warning(f"""
+⚠️ **CẢNH BÁO KHUẨN**
+
+Lô này có tình trạng **Khuẩn** (Mã {ma_tinh_trang})
+- Vẫn lưu trong Phòng Sáng
+- Có thể sử dụng làm Mô Mẹ nhưng **cần theo dõi**
+- Ưu tiên xử lý trước khi lây lan
+                        """)
+                else:  # Sạch
+                    st.success(f"✅ Lô sạch (Mã {ma_tinh_trang}) - Chất lượng tốt")
                 
                 box_cay = st.number_input(
                     "Box cấy *",
@@ -2584,15 +2620,15 @@ else:
                         
                         c.execute('''
                             INSERT INTO nhat_ky_cay (
-                                ngay_cay, thang, tuan, nhan_vien, ma_nhan_vien, ten_giong, chu_ky, tinh_trang,
+                                ngay_cay, thang, tuan, nhan_vien, ma_nhan_vien, ten_giong, chu_ky, tinh_trang, ma_tinh_trang,
                                 box_cay, ma_so_moi_truong_me, ma_so_moi_truong_con,
                                 so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
                                 tong_so_cay_con, gio_bat_dau, gio_ket_thuc, tong_gio_lam, nang_suat, ghi_chu, ma_qr, ma_lo_mo_soi, ngay_tao
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             ngay_cay.strftime("%Y-%m-%d"), thang, tuan,
                             user_info['ten_nhan_vien'], user_info['ma_nhan_vien'],
-                            ten_giong, chu_ky, tinh_trang, box_cay,
+                            ten_giong, chu_ky, tinh_trang, ma_tinh_trang, box_cay,
                             ma_so_moi_truong_me, ma_so_moi_truong_con,
                             so_tui_me, so_cum_tui_me, so_tui_con, so_cum_tui_con,
                             tong_so_cay_con,
@@ -2613,17 +2649,38 @@ else:
                         tuan_xuat, ngay_xuat = tinh_tuan_xuat_cay(ngay_cay, chu_ky)
                         
                         # Tự động tạo bản ghi trong phòng sáng
-                        # Phân loại theo mã tình trạng
-                        ma_tinh_trang_luu = get_ma_tinh_trang(tinh_trang)
-                        loai_tinh_trang, mau_sac, icon = phan_loai_tinh_trang(ma_tinh_trang_luu)
+                        # Phân loại theo mã tình trạng (giờ đã có biến ma_tinh_trang từ form)
+                        loai_tinh_trang, mau_sac, icon = phan_loai_tinh_trang(ma_tinh_trang)
                         
-                        # Khởi tạo số túi dựa trên tình trạng ban đầu
-                        so_tui_sach = so_tui_con if tinh_trang == "Sạch" else 0
-                        so_tui_khuan_nhe = so_tui_con if tinh_trang == "Khuẩn nhẹ" else 0
-                        so_tui_khuan_nang = so_tui_con if tinh_trang == "Khuẩn nặng" else 0
-                        so_tui_nam = so_tui_con if tinh_trang == "Nấm" else 0
-                        so_tui_khuan_moi_truong = so_tui_con if tinh_trang == "Khuẩn môi trường" else 0
-                        so_tui_khac = so_tui_con if tinh_trang in ["Khuẩn khác", "Hủy hoàn toàn"] else 0
+                        # Khởi tạo số túi dựa trên tình trạng
+                        if tinh_trang == "Sạch":
+                            so_tui_sach = so_tui_con
+                            so_tui_khuan_nhe = 0
+                            so_tui_khuan_nang = 0
+                            so_tui_nam = 0
+                            so_tui_khuan_moi_truong = 0
+                            so_tui_khac = 0
+                        else:  # Khuẩn
+                            so_tui_sach = 0
+                            # Phân loại dựa trên mã
+                            if ma_tinh_trang % 10 == 9:  # Mã cuối 9: Hủy
+                                so_tui_khuan_nang = so_tui_con
+                                so_tui_khuan_nhe = 0
+                                so_tui_nam = 0
+                                so_tui_khuan_moi_truong = 0
+                                so_tui_khac = 0
+                            elif ma_tinh_trang % 10 == 5:  # Mã cuối 5: Khuẩn nhẹ
+                                so_tui_khuan_nhe = so_tui_con
+                                so_tui_khuan_nang = 0
+                                so_tui_nam = 0
+                                so_tui_khuan_moi_truong = 0
+                                so_tui_khac = 0
+                            else:  # Các mã khác
+                                so_tui_khuan_nhe = so_tui_con
+                                so_tui_khuan_nang = 0
+                                so_tui_nam = 0
+                                so_tui_khuan_moi_truong = 0
+                                so_tui_khac = 0
                         
                         # LOGIC MÃ 9: HỦY BỎ - KHÔNG LƯU VÀO PHÒNG SÁNG
                         if loai_tinh_trang == 'huy':
@@ -2631,7 +2688,7 @@ else:
                             tong_so_tui = 0  # Trừ thẳng khỏi kho
                             tong_so_cay = 0
                             trang_thai_phong_sang = "Đã hủy"
-                            ghi_chu_them = f"[HỦY BỎ - Mã {ma_tinh_trang_luu}] " + (ghi_chu if ghi_chu else "")
+                            ghi_chu_them = f"[HỦY BỎ - Mã {ma_tinh_trang}] " + (ghi_chu if ghi_chu else "")
                         else:
                             # Mã cuối 3 (sạch) hoặc 5 (khuẩn - theo dõi): Lưu vào phòng sáng bình thường
                             tong_so_tui = so_tui_con
@@ -2639,7 +2696,7 @@ else:
                             
                             if loai_tinh_trang == 'khuan':
                                 trang_thai_phong_sang = "Đang nuôi - Theo dõi khuẩn"
-                                ghi_chu_them = f"[CẢNH BÁO MÃ {ma_tinh_trang_luu} - Khuẩn nhẹ] " + (ghi_chu if ghi_chu else "")
+                                ghi_chu_them = f"[CẢNH BÁO MÃ {ma_tinh_trang} - Khuẩn] " + (ghi_chu if ghi_chu else "")
                             else:
                                 trang_thai_phong_sang = "Đang nuôi"
                                 ghi_chu_them = ghi_chu
