@@ -5714,9 +5714,22 @@ else:
                     submitted = st.form_submit_button("💾 Lưu", use_container_width=True, type="primary")
                     
                     if submitted and ma_giong_moi.strip():
-                        # Chỉ lưu mã vào danh sách, không gán cho giống cụ thể
-                        st.success(f"✅ Đã thêm mã: {ma_giong_moi.strip()}")
-                        st.info("💡 Mã này sẽ có sẵn để gán cho giống khi cần")
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        try:
+                            # Tạo một tên giống tạm thời với mã này
+                            ten_tam = f"_MA_{ma_giong_moi.strip()}"
+                            c.execute('''
+                                INSERT INTO danh_muc_ten_giong (ten_giong, ma_giong, ngay_tao)
+                                VALUES (?, ?, ?)
+                            ''', (ten_tam, ma_giong_moi.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                            conn.commit()
+                            conn.close()
+                            st.success(f"✅ Đã thêm mã: {ma_giong_moi.strip()}")
+                            st.rerun()
+                        except sqlite3.IntegrityError:
+                            conn.close()
+                            st.error(f"❌ Mã {ma_giong_moi.strip()} đã tồn tại!")
             
             st.markdown("---")
             st.markdown("#### 🗑️ Xóa")
