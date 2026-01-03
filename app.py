@@ -382,6 +382,61 @@ def migrate_database():
         #     c.execute("DROP TABLE IF EXISTS danh_muc_moi_truong")
         #     conn.commit()
     
+    # Kiểm tra và migrate bảng mo_soi
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='mo_soi'")
+    mo_soi_table_exists = c.fetchone() is not None
+    
+    if mo_soi_table_exists:
+        columns_mo_soi = check_table_structure(conn, 'mo_soi')
+        
+        # Thêm cột ngay_cay nếu chưa có (cho manual entry)
+        if 'ngay_cay' not in columns_mo_soi:
+            try:
+                c.execute("ALTER TABLE mo_soi ADD COLUMN ngay_cay TEXT")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột tuan_cay nếu chưa có
+        if 'tuan_cay' not in columns_mo_soi:
+            try:
+                c.execute("ALTER TABLE mo_soi ADD COLUMN tuan_cay INTEGER")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột thang_cay nếu chưa có
+        if 'thang_cay' not in columns_mo_soi:
+            try:
+                c.execute("ALTER TABLE mo_soi ADD COLUMN thang_cay INTEGER")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột nhan_vien_cay nếu chưa có
+        if 'nhan_vien_cay' not in columns_mo_soi:
+            try:
+                c.execute("ALTER TABLE mo_soi ADD COLUMN nhan_vien_cay TEXT")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột ma_nhan_vien_cay nếu chưa có
+        if 'ma_nhan_vien_cay' not in columns_mo_soi:
+            try:
+                c.execute("ALTER TABLE mo_soi ADD COLUMN ma_nhan_vien_cay TEXT")
+                conn.commit()
+            except:
+                pass
+        
+        # Thêm cột id_nhat_ky_cay nếu chưa có (liên kết với phòng sáng)
+        if 'id_nhat_ky_cay' not in columns_mo_soi:
+            try:
+                c.execute("ALTER TABLE mo_soi ADD COLUMN id_nhat_ky_cay INTEGER")
+                conn.commit()
+            except:
+                pass
+    
     # Kiểm tra và tạo bảng phòng sáng nếu chưa có
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quan_ly_phong_sang'")
     ps_table_exists = c.fetchone() is not None
@@ -4514,56 +4569,55 @@ else:
                         # Tạo mã lô mô soi tự động
                         ma_lo_mo_soi_new = tao_ma_lo_mo_soi()
                         
+                        # Tính tuần soi và năm từ ngày soi
+                        tuan_soi_auto = ngay_soi_manual.isocalendar()[1]
+                        nam_auto = ngay_soi_manual.year
+                        
                         # Lưu vào database
                         conn = sqlite3.connect('data.db')
                         c = conn.cursor()
                         
+                        # Thêm id_nhat_ky_cay nếu chưa có
+                        try:
+                            c.execute("ALTER TABLE mo_soi ADD COLUMN id_nhat_ky_cay INTEGER")
+                            conn.commit()
+                        except:
+                            pass
+                        
                         c.execute('''
                             INSERT INTO mo_soi (
-                                ma_lo_mo_soi,
-                                ten_giong,
-                                chu_ky_truoc,
-                                ngay_cay,
-                                tuan_cay,
-                                thang_cay,
-                                ngay_soi,
-                                nhan_vien_cay,
-                                ma_nhan_vien_cay,
-                                so_luong_ban_dau,
-                                so_tui_nhiem,
-                                so_tui_sach,
-                                so_cum_moi_tui,
-                                tong_so_cum_sach,
-                                so_cum_con_lai,
-                                trang_thai,
-                                nguoi_soi,
-                                ma_nv_soi,
-                                ghi_chu,
-                                ngay_tao,
-                                id_nhat_ky_cay
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                ma_lo_mo_soi, ten_giong, chu_ky_truoc, ngay_soi, tuan_soi, nam,
+                                so_luong_ban_dau, so_tui_nhiem, so_tui_sach, so_cum_moi_tui,
+                                tong_cum_sach, so_cum_da_cap, so_cum_con_lai, trang_thai,
+                                nguoi_soi, ma_nhan_vien, ghi_chu, ngay_tao, ngay_cap_nhat,
+                                id_nhat_ky_cay, ngay_cay, tuan_cay, thang_cay, nhan_vien_cay, ma_nhan_vien_cay
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             ma_lo_mo_soi_new,
                             ten_giong_manual,
                             chu_ky_manual,
-                            ngay_cay_manual.strftime("%Y-%m-%d"),
-                            tuan_manual,
-                            thang_manual,
                             ngay_soi_manual.strftime("%Y-%m-%d"),
-                            nguoi_soi_manual,
-                            ma_nv_soi_manual,
+                            tuan_soi_auto,
+                            nam_auto,
                             so_luong_ban_dau_manual,
                             so_tui_nhiem_manual,
                             so_tui_sach_manual,
                             so_cum_moi_tui_manual,
                             tong_cum_sach_manual,
-                            tong_cum_sach_manual,  # Ban đầu = tổng cụm sạch
-                            "Chưa sử dụng",
+                            0,  # so_cum_da_cap
+                            tong_cum_sach_manual,  # so_cum_con_lai (ban đầu = tổng)
+                            'Đang sử dụng',  # trang_thai
                             nguoi_soi_manual,
                             ma_nv_soi_manual,
-                            ghi_chu_manual,
-                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            None  # Không liên kết với Phòng Sáng
+                            ghi_chu_manual if ghi_chu_manual else '',
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # ngay_tao
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # ngay_cap_nhat
+                            None,  # id_nhat_ky_cay (không liên kết Phòng Sáng)
+                            ngay_cay_manual.strftime("%Y-%m-%d"),  # ngay_cay
+                            tuan_manual,  # tuan_cay
+                            thang_manual,  # thang_cay
+                            nguoi_soi_manual,  # nhan_vien_cay (dùng người soi)
+                            ma_nv_soi_manual  # ma_nhan_vien_cay
                         ))
                         
                         conn.commit()
@@ -4574,6 +4628,8 @@ else:
                         
                         📦 **Mã lô:** {ma_lo_mo_soi_new}
                         🌱 **Giống:** {ten_giong_manual} - {chu_ky_manual}
+                        📅 **Ngày cấy:** {ngay_cay_manual.strftime("%Y-%m-%d")} (Tuần {tuan_manual} / Tháng {thang_manual})
+                        📊 **Ngày soi:** {ngay_soi_manual.strftime("%Y-%m-%d")}
                         ✅ **Túi sạch:** {so_tui_sach_manual} túi ({tong_cum_sach_manual} cụm)
                         ⚠️ **Túi nhiễm:** {so_tui_nhiem_manual} túi ({ty_le_nhiem_manual:.1f}%)
                         
