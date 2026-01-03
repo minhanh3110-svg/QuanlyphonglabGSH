@@ -467,6 +467,18 @@ def init_database():
         )
     ''')
     
+    # Bảng danh mục Mã tình trạng
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS danh_muc_ma_tinh_trang (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ma_so INTEGER UNIQUE NOT NULL,
+            ten_mo_ta TEXT NOT NULL,
+            chu_ky TEXT NOT NULL,
+            loai TEXT NOT NULL,
+            ngay_tao TEXT NOT NULL
+        )
+    ''')
+    
     # Bảng danh mục Giàn/Kệ (Phòng sáng)
     c.execute('''
         CREATE TABLE IF NOT EXISTS danh_muc_gian_ke (
@@ -714,6 +726,25 @@ def get_danh_sach_chu_ky():
     df = pd.read_sql_query('SELECT chu_ky FROM danh_muc_chu_ky ORDER BY chu_ky', conn)
     conn.close()
     return df['chu_ky'].tolist()
+
+def get_danh_sach_ma_tinh_trang(chu_ky=None):
+    """
+    Lấy danh sách mã tình trạng từ database
+    Nếu chu_ky được chỉ định, chỉ lấy mã của chu kỳ đó
+    Returns: list of dict [{ma_so, ten_mo_ta, chu_ky, loai}, ...]
+    """
+    conn = sqlite3.connect('data.db')
+    if chu_ky:
+        query = 'SELECT ma_so, ten_mo_ta, chu_ky, loai FROM danh_muc_ma_tinh_trang WHERE chu_ky = ? ORDER BY ma_so'
+        df = pd.read_sql_query(query, conn, params=[chu_ky])
+    else:
+        query = 'SELECT ma_so, ten_mo_ta, chu_ky, loai FROM danh_muc_ma_tinh_trang ORDER BY ma_so'
+        df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    if len(df) == 0:
+        return []
+    return df.to_dict('records')
 
 def get_danh_sach_gian_ke():
     """Lấy danh sách giàn/kệ từ database"""
@@ -2244,43 +2275,37 @@ else:
                     )
                 
                 with col_ma:
-                    # Mã tình trạng theo chu kỳ
-                    # Mã có 3 chữ số: XYZ
-                    # X = 3: Chu kỳ Nhân, X = 2: Chu kỳ Giãn, X = 1: Chu kỳ Rễ
-                    # YZ = 01, 03, 05, 07, 09 (các trạng thái khác nhau)
+                    # Load mã tình trạng từ database theo chu kỳ đã chọn
+                    danh_sach_ma = get_danh_sach_ma_tinh_trang(chu_ky)
                     
-                    # Xác định prefix dựa trên chu kỳ
-                    if "Nhân" in chu_ky or "nhan" in chu_ky.lower():
-                        prefix = "3"
-                        chu_ky_label = "Nhân"
-                    elif "Giãn" in chu_ky or "gian" in chu_ky.lower():
-                        prefix = "2"
-                        chu_ky_label = "Giãn"
-                    elif "Rễ" in chu_ky or "re" in chu_ky.lower():
-                        prefix = "1"
-                        chu_ky_label = "Rễ"
+                    if len(danh_sach_ma) == 0:
+                        st.warning("⚠️ Chưa có mã tình trạng cho chu kỳ này. Vui lòng thêm ở 'Quản lý danh mục'!")
+                        # Fallback: Dùng mã mặc định
+                        ma_tinh_trang = 301
                     else:
-                        prefix = "3"  # Mặc định
-                        chu_ky_label = "Khác"
-                    
-                    # Danh sách mã tình trạng
-                    ma_options = [
-                        f"{prefix}01 - Sạch chuẩn",
-                        f"{prefix}03 - Sạch tốt",
-                        f"{prefix}05 - Khuẩn nhẹ",
-                        f"{prefix}07 - Khuẩn vừa",
-                        f"{prefix}09 - Khuẩn nặng/Hủy"
-                    ]
-                    
-                    ma_tinh_trang_selected = st.selectbox(
-                        f"Mã tình trạng ({chu_ky_label}) *",
-                        options=ma_options,
-                        index=0 if tinh_trang == "Sạch" else 2,  # Mặc định 01 cho Sạch, 05 cho Khuẩn
-                        help=f"Mã tình trạng theo chu kỳ {chu_ky_label}"
-                    )
-                    
-                    # Lấy mã số từ chuỗi được chọn (3 chữ số đầu)
-                    ma_tinh_trang = int(ma_tinh_trang_selected.split(" - ")[0])
+                        # Lọc theo loại tình trạng đã chọn
+                        if tinh_trang == "Sạch":
+                            ma_options = [m for m in danh_sach_ma if m['loai'] == 'Sạch']
+                        else:  # Khuẩn
+                            ma_options = [m for m in danh_sach_ma if m['loai'] in ['Khuẩn', 'Hủy']]
+                        
+                        if len(ma_options) == 0:
+                            st.warning(f"⚠️ Chưa có mã cho '{tinh_trang}'!")
+                            ma_tinh_trang = 301
+                        else:
+                            # Tạo display options: "301 - Sạch chuẩn"
+                            ma_display = [f"{m['ma_so']} - {m['ten_mo_ta']}" for m in ma_options]
+                            
+                            # Chọn mã
+                            ma_selected = st.selectbox(
+                                f"Mã tình trạng ({chu_ky}) *",
+                                options=ma_display,
+                                index=0,
+                                help=f"Chọn mã tình trạng cho chu kỳ {chu_ky}"
+                            )
+                            
+                            # Lấy mã số từ chuỗi
+                            ma_tinh_trang = int(ma_selected.split(" - ")[0])
                 
                 # Hiển thị cảnh báo nếu chọn Khuẩn
                 if tinh_trang == "Khuẩn":
@@ -5591,7 +5616,7 @@ Lô này có tình trạng **Khuẩn** (Mã {ma_tinh_trang})
         st.header("⚙️ Quản lý danh mục")
         st.markdown("---")
         
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🧪 Môi trường", "📦 Giàn/Kệ", "🏪 Vị trí Kho"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🔢 Mã tình trạng", "🧪 Môi trường", "📦 Giàn/Kệ", "🏪 Vị trí Kho"])
         
         # Tab Tên giống
         with tab1:
@@ -5701,8 +5726,128 @@ Lô này có tình trạng **Khuẩn** (Mã {ma_tinh_trang})
                         st.success(f"✅ Đã xóa: {chu_ky_xoa}")
                         st.rerun()
         
-        # Tab Môi trường
+        # Tab Mã tình trạng
         with tab3:
+            st.subheader("🔢 Quản lý Mã tình trạng")
+            st.caption("Mã 3 chữ số theo format XYZ: X=Chu kỳ (3=Nhân, 2=Giãn, 1=Rễ), YZ=Loại (01-03=Sạch, 05-07=Khuẩn, 09=Hủy)")
+            
+            # Lấy danh sách hiện tại
+            conn = sqlite3.connect('data.db')
+            df_ma = pd.read_sql_query('''
+                SELECT ma_so AS "Mã số", ten_mo_ta AS "Mô tả", chu_ky AS "Chu kỳ", loai AS "Loại"
+                FROM danh_muc_ma_tinh_trang 
+                ORDER BY ma_so
+            ''', conn)
+            conn.close()
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("#### 📋 Danh sách hiện tại")
+                if len(df_ma) > 0:
+                    # Định dạng màu cho cột Loại
+                    def highlight_loai(row):
+                        if row['Loại'] == 'Sạch':
+                            return ['background-color: #d4edda'] * len(row)
+                        elif row['Loại'] == 'Khuẩn':
+                            return ['background-color: #fff3cd'] * len(row)
+                        elif row['Loại'] == 'Hủy':
+                            return ['background-color: #f8d7da'] * len(row)
+                        return [''] * len(row)
+                    
+                    styled_df = df_ma.style.apply(highlight_loai, axis=1)
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                else:
+                    st.warning("⚠️ Chưa có mã tình trạng nào. Hãy thêm mới!")
+            
+            with col2:
+                st.markdown("#### ➕ Thêm mới")
+                with st.form("form_them_ma_tinh_trang", clear_on_submit=True):
+                    chu_ky_chon = st.selectbox(
+                        "Chu kỳ áp dụng *",
+                        options=get_danh_sach_chu_ky(),
+                        help="Chọn chu kỳ để tự động gợi ý mã số"
+                    )
+                    
+                    # Gợi ý prefix dựa trên chu kỳ
+                    if "Nhân" in chu_ky_chon or "nhan" in chu_ky_chon.lower():
+                        prefix_goi_y = 3
+                    elif "Giãn" in chu_ky_chon or "gian" in chu_ky_chon.lower():
+                        prefix_goi_y = 2
+                    elif "Rễ" in chu_ky_chon or "re" in chu_ky_chon.lower():
+                        prefix_goi_y = 1
+                    else:
+                        prefix_goi_y = 3
+                    
+                    ma_so_moi = st.number_input(
+                        "Mã số (3 chữ số) *",
+                        min_value=100,
+                        max_value=399,
+                        value=prefix_goi_y * 100 + 1,
+                        step=1,
+                        help=f"Gợi ý: {prefix_goi_y}01, {prefix_goi_y}03, {prefix_goi_y}05..."
+                    )
+                    
+                    ten_mo_ta = st.text_input(
+                        "Mô tả *",
+                        placeholder="VD: Sạch chuẩn, Khuẩn nhẹ...",
+                        help="Tên mô tả ngắn gọn"
+                    )
+                    
+                    loai_chon = st.selectbox(
+                        "Loại tình trạng *",
+                        options=["Sạch", "Khuẩn", "Hủy"],
+                        help="Sạch: Chất lượng tốt | Khuẩn: Theo dõi | Hủy: Loại bỏ"
+                    )
+                    
+                    submitted = st.form_submit_button("➕ Thêm", use_container_width=True, type="primary")
+                    
+                    if submitted:
+                        if not ten_mo_ta.strip():
+                            st.error("❌ Vui lòng nhập mô tả!")
+                        else:
+                            conn = sqlite3.connect('data.db')
+                            c = conn.cursor()
+                            try:
+                                c.execute('''
+                                    INSERT INTO danh_muc_ma_tinh_trang (ma_so, ten_mo_ta, chu_ky, loai, ngay_tao)
+                                    VALUES (?, ?, ?, ?, ?)
+                                ''', (
+                                    ma_so_moi,
+                                    ten_mo_ta.strip(),
+                                    chu_ky_chon,
+                                    loai_chon,
+                                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                ))
+                                conn.commit()
+                                conn.close()
+                                st.success(f"✅ Đã thêm: Mã {ma_so_moi} - {ten_mo_ta.strip()}")
+                                st.rerun()
+                            except sqlite3.IntegrityError:
+                                conn.close()
+                                st.error(f"❌ Mã {ma_so_moi} đã tồn tại!")
+            
+            st.markdown("---")
+            st.markdown("#### 🗑️ Xóa")
+            if len(df_ma) > 0:
+                with st.form("form_xoa_ma_tinh_trang", clear_on_submit=True):
+                    # Tạo options với format "Mã - Mô tả"
+                    ma_options = [f"{row['Mã số']} - {row['Mô tả']}" for _, row in df_ma.iterrows()]
+                    ma_xoa = st.selectbox("Chọn mã cần xóa", options=ma_options)
+                    submitted = st.form_submit_button("🗑️ Xóa", use_container_width=True)
+                    
+                    if submitted:
+                        ma_so_xoa = int(ma_xoa.split(" - ")[0])
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        c.execute('DELETE FROM danh_muc_ma_tinh_trang WHERE ma_so = ?', (ma_so_xoa,))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"✅ Đã xóa: Mã {ma_so_xoa}")
+                        st.rerun()
+        
+        # Tab Môi trường
+        with tab4:
             st.subheader("🧪 Quản lý Môi trường")
             
             # Lấy danh sách môi trường với mã số
@@ -5943,8 +6088,8 @@ Lô này có tình trạng **Khuẩn** (Mã {ma_tinh_trang})
                 else:
                     st.info("ℹ️ Không có môi trường nào để xóa.")
         
-        # TAB 4: QUẢN LÝ GIÀN/KỆ PHÒNG SÁNG
-        with tab4:
+        # TAB 5: QUẢN LÝ GIÀN/KỆ PHÒNG SÁNG
+        with tab5:
             st.subheader("📦 Quản lý Giàn/Kệ Phòng Sáng")
             
             danh_sach_gian_ke = get_danh_sach_gian_ke()
@@ -6039,8 +6184,8 @@ Lô này có tình trạng **Khuẩn** (Mã {ma_tinh_trang})
                 - ✅ Quản lý kiểm kê hiệu quả
                 """)
         
-        # TAB 5: QUẢN LÝ VỊ TRÍ KHO MÔI TRƯỜNG
-        with tab5:
+        # TAB 6: QUẢN LÝ VỊ TRÍ KHO MÔI TRƯỜNG
+        with tab6:
             st.subheader("🏪 Quản lý Vị trí Kho Môi trường")
             
             danh_sach_vi_tri_kho = get_danh_sach_vi_tri_kho()
