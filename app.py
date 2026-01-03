@@ -2213,18 +2213,7 @@ else:
         st.markdown("---")
         
         # Lấy danh sách từ database
-        conn = sqlite3.connect('data.db')
-        df_giong = pd.read_sql_query('SELECT ten_giong, ma_giong FROM danh_muc_ten_giong ORDER BY ten_giong', conn)
-        conn.close()
-        
-        # Tạo dict để map tên giống -> mã giống
-        dict_ma_giong = {}
-        danh_sach_ten_giong = []
-        for _, row in df_giong.iterrows():
-            ten = row['ten_giong']
-            ma = row['ma_giong']
-            danh_sach_ten_giong.append(ten)
-            dict_ma_giong[ten] = ma if pd.notna(ma) else None
+        danh_sach_ten_giong = get_danh_sach_ten_giong()
         danh_sach_chu_ky = get_danh_sach_chu_ky()
         danh_sach_moi_truong = get_danh_sach_moi_truong()  # Dict: mã số -> tên
         
@@ -2268,25 +2257,43 @@ else:
                 st.markdown("---")
                 st.markdown("#### 🌿 Thông tin giống")
                 
-                # Dropdown với format "Tên giống (Mã)"
-                giong_display_options = []
-                for ten in danh_sach_ten_giong:
-                    ma = dict_ma_giong.get(ten)
-                    if ma:
-                        giong_display_options.append(f"{ten} ({ma})")
+                # 2 cột: Tên giống và Mã giống
+                col_ten_giong, col_ma_giong = st.columns(2)
+                
+                with col_ten_giong:
+                    ten_giong = st.selectbox(
+                        "Tên giống *",
+                        options=danh_sach_ten_giong,
+                        index=0,
+                        help="Chọn tên giống cây"
+                    )
+                
+                with col_ma_giong:
+                    # Lấy danh sách mã giống từ database
+                    conn_ma = sqlite3.connect('data.db')
+                    df_ma_giong_list = pd.read_sql_query('''
+                        SELECT DISTINCT ma_giong 
+                        FROM danh_muc_ten_giong 
+                        WHERE ma_giong IS NOT NULL AND ma_giong != ''
+                        ORDER BY ma_giong
+                    ''', conn_ma)
+                    conn_ma.close()
+                    
+                    danh_sach_ma_giong = df_ma_giong_list['ma_giong'].tolist() if len(df_ma_giong_list) > 0 else []
+                    
+                    if len(danh_sach_ma_giong) > 0:
+                        ma_giong = st.selectbox(
+                            "Mã giống",
+                            options=["(Không chọn)"] + danh_sach_ma_giong,
+                            index=0,
+                            help="Chọn mã giống (tùy chọn)"
+                        )
+                        # Nếu chọn "(Không chọn)", set ma_giong = None
+                        if ma_giong == "(Không chọn)":
+                            ma_giong = None
                     else:
-                        giong_display_options.append(ten)
-                
-                ten_giong_selected = st.selectbox(
-                    "Tên giống *",
-                    options=giong_display_options,
-                    index=0,
-                    help="Chọn loại giống cây"
-                )
-                
-                # Lấy tên giống thực tế (bỏ mã nếu có)
-                ten_giong = ten_giong_selected.split(" (")[0] if " (" in ten_giong_selected else ten_giong_selected
-                ma_giong = dict_ma_giong.get(ten_giong)
+                        st.text_input("Mã giống", value="", disabled=True, help="Chưa có mã giống trong danh mục")
+                        ma_giong = None
                 
                 chu_ky = st.selectbox(
                     "Chu kỳ *",
@@ -5704,7 +5711,7 @@ else:
                         help="Nhập mã định danh giống"
                     )
                     
-                    submitted = st.form_submit_button("➕ Thêm", use_container_width=True, type="primary")
+                    submitted = st.form_submit_button("💾 Lưu", use_container_width=True, type="primary")
                     
                     if submitted and ma_giong_moi.strip():
                         # Chỉ lưu mã vào danh sách, không gán cho giống cụ thể
