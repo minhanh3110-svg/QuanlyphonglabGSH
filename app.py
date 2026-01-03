@@ -2188,26 +2188,24 @@ else:
                     value=date.today()
                 )
                 
-                # Tự động tính tháng và tuần
-                thang = ngay_cay.month
-                tuan = tinh_tuan(ngay_cay)
+                # Lấy năm từ ngày cấy
                 nam = ngay_cay.year
                 
-                # Hiển thị Tuần và Tháng dưới dạng read-only (Tối ưu mobile)
+                # NHẬP TAY Tuần và Tháng
                 col_tuan, col_thang = st.columns(2)
                 with col_tuan:
-                    st.text_input(
-                        "📊 Tuần cấy",
-                        value=f"Tuần {tuan:02d}",
-                        disabled=True,
-                        help="Tự động tính từ ngày cấy"
+                    tuan = st.selectbox(
+                        "📊 Tuần cấy *",
+                        options=list(range(1, 53)),
+                        index=tinh_tuan(ngay_cay) - 1,  # Gợi ý tuần hiện tại
+                        help="Chọn tuần cấy (1-52)"
                     )
                 with col_thang:
-                    st.text_input(
-                        "📅 Tháng/Năm",
-                        value=f"Tháng {thang:02d}/{nam}",
-                        disabled=True,
-                        help="Tự động tính từ ngày cấy"
+                    thang = st.selectbox(
+                        "📅 Tháng cấy *",
+                        options=list(range(1, 13)),
+                        index=ngay_cay.month - 1,  # Gợi ý tháng hiện tại
+                        help="Chọn tháng cấy (1-12)"
                     )
                 
                 st.markdown("---")
@@ -4507,10 +4505,10 @@ else:
                     with st.form("form_nhap_mo_soi", clear_on_submit=False):
                         st.markdown("#### 📅 Thông tin kiểm tra")
                         ngay_soi = st.date_input(
-                        "Ngày kiểm tra (soi) *",
-                        value=date.today(),
-                        help="Ngày thực hiện kiểm tra mô soi"
-                    )
+                            "Ngày kiểm tra (soi) *",
+                            value=date.today(),
+                            help="Ngày thực hiện kiểm tra mô soi"
+                        )
                     
                         st.markdown("---")
                         st.markdown("#### 🔢 Kết quả kiểm tra (Admin nhập)")
