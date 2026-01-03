@@ -5607,27 +5607,21 @@ else:
         st.header("⚙️ Quản lý danh mục")
         st.markdown("---")
         
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🌿 Tên giống", "🔄 Chu kỳ", "🔢 Mã tình trạng", "🧪 Môi trường", "📦 Giàn/Kệ", "🏪 Vị trí Kho"])
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🌿 Tên giống", "🏷️ Mã giống", "🔄 Chu kỳ", "🔢 Mã tình trạng", "🧪 Môi trường", "📦 Giàn/Kệ", "🏪 Vị trí Kho"])
         
         # Tab Tên giống
         with tab1:
             st.subheader("🌿 Quản lý Tên giống")
             
-            # Lấy danh sách với mã giống
-            conn = sqlite3.connect('data.db')
-            df_giong = pd.read_sql_query('''
-                SELECT ten_giong AS "Tên giống", ma_giong AS "Mã giống"
-                FROM danh_muc_ten_giong 
-                ORDER BY ten_giong
-            ''', conn)
-            conn.close()
+            danh_sach_ten_giong = get_danh_sach_ten_giong()
             
             col1, col2 = st.columns([2, 1])
             
             with col1:
                 st.markdown("#### 📋 Danh sách hiện tại")
-                if len(df_giong) > 0:
-                    st.dataframe(df_giong, use_container_width=True, hide_index=True)
+                if len(danh_sach_ten_giong) > 0:
+                    df_tg = pd.DataFrame({'Tên giống': danh_sach_ten_giong})
+                    st.dataframe(df_tg, use_container_width=True, hide_index=True)
                 else:
                     st.warning("⚠️ Chưa có tên giống nào.")
             
@@ -5639,12 +5633,6 @@ else:
                         placeholder="VD: Đồng tiền",
                         key="them_tg"
                     )
-                    ma_giong_moi = st.text_input(
-                        "Mã giống",
-                        placeholder="VD: T1126",
-                        help="Mã định danh giống (có thể để trống)",
-                        key="them_mg"
-                    )
                     submitted = st.form_submit_button("➕ Thêm", use_container_width=True, type="primary")
                     
                     if submitted and ten_giong_moi.strip():
@@ -5652,16 +5640,15 @@ else:
                         c = conn.cursor()
                         try:
                             c.execute('''
-                                INSERT INTO danh_muc_ten_giong (ten_giong, ma_giong, ngay_tao)
-                                VALUES (?, ?, ?)
+                                INSERT INTO danh_muc_ten_giong (ten_giong, ngay_tao)
+                                VALUES (?, ?)
                             ''', (
                                 ten_giong_moi.strip(), 
-                                ma_giong_moi.strip() if ma_giong_moi.strip() else None,
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             ))
                             conn.commit()
                             conn.close()
-                            st.success(f"✅ Đã thêm: {ten_giong_moi.strip()}" + (f" (Mã: {ma_giong_moi.strip()})" if ma_giong_moi.strip() else ""))
+                            st.success(f"✅ Đã thêm: {ten_giong_moi.strip()}")
                             st.rerun()
                         except sqlite3.IntegrityError:
                             conn.close()
@@ -5669,33 +5656,114 @@ else:
             
             st.markdown("---")
             st.markdown("#### 🗑️ Xóa")
-            if len(df_giong) > 0:
+            if len(danh_sach_ten_giong) > 0:
                 with st.form("form_xoa_ten_giong", clear_on_submit=True):
-                    # Tạo options với format "Tên giống (Mã)"
-                    giong_options = []
-                    for _, row in df_giong.iterrows():
-                        if pd.notna(row['Mã giống']) and row['Mã giống']:
-                            giong_options.append(f"{row['Tên giống']} ({row['Mã giống']})")
-                        else:
-                            giong_options.append(row['Tên giống'])
-                    
-                    ten_giong_xoa = st.selectbox("Chọn giống cần xóa", options=giong_options, key="xoa_tg")
+                    ten_giong_xoa = st.selectbox("Chọn giống cần xóa", options=danh_sach_ten_giong, key="xoa_tg")
                     submitted = st.form_submit_button("🗑️ Xóa", use_container_width=True)
                     
                     if submitted:
-                        # Lấy tên giống từ chuỗi
-                        ten_giong_xoa_clean = ten_giong_xoa.split(" (")[0] if " (" in ten_giong_xoa else ten_giong_xoa
-                        
                         conn = sqlite3.connect('data.db')
                         c = conn.cursor()
-                        c.execute('DELETE FROM danh_muc_ten_giong WHERE ten_giong = ?', (ten_giong_xoa_clean,))
+                        c.execute('DELETE FROM danh_muc_ten_giong WHERE ten_giong = ?', (ten_giong_xoa,))
                         conn.commit()
                         conn.close()
                         st.success(f"✅ Đã xóa: {ten_giong_xoa}")
                         st.rerun()
         
-        # Tab Chu kỳ
+        # Tab Mã giống - DANH MỤC RIÊNG
         with tab2:
+            st.subheader("🏷️ Quản lý Mã giống")
+            st.caption("Gán mã định danh cho từng giống cây (VD: T1126, BH2024...)")
+            
+            # Lấy danh sách
+            conn = sqlite3.connect('data.db')
+            df_ma_giong = pd.read_sql_query('''
+                SELECT ten_giong AS "Tên giống", ma_giong AS "Mã giống"
+                FROM danh_muc_ten_giong 
+                WHERE ma_giong IS NOT NULL AND ma_giong != ''
+                ORDER BY ten_giong
+            ''', conn)
+            conn.close()
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                st.markdown("#### 📋 Danh sách hiện tại")
+                if len(df_ma_giong) > 0:
+                    st.dataframe(df_ma_giong, use_container_width=True, hide_index=True)
+                else:
+                    st.info("ℹ️ Chưa có giống nào được gán mã.")
+            
+            with col2:
+                st.markdown("#### ➕ Cập nhật mã")
+                
+                # Lấy danh sách tất cả giống
+                danh_sach_tat_ca = get_danh_sach_ten_giong()
+                
+                if len(danh_sach_tat_ca) == 0:
+                    st.warning("⚠️ Vui lòng thêm tên giống trước!")
+                else:
+                    with st.form("form_cap_nhat_ma_giong", clear_on_submit=True):
+                        ten_giong_chon = st.selectbox(
+                            "Chọn giống *",
+                            options=danh_sach_tat_ca,
+                            help="Chọn giống cần gán/cập nhật mã"
+                        )
+                        
+                        # Lấy mã hiện tại nếu có
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        c.execute('SELECT ma_giong FROM danh_muc_ten_giong WHERE ten_giong = ?', (ten_giong_chon,))
+                        result = c.fetchone()
+                        conn.close()
+                        ma_hien_tai = result[0] if result and result[0] else ""
+                        
+                        ma_giong_moi = st.text_input(
+                            "Mã giống *",
+                            value=ma_hien_tai,
+                            placeholder="VD: T1126, BH2024",
+                            help="Mã định danh của giống (để trống để xóa mã)"
+                        )
+                        
+                        submitted = st.form_submit_button("💾 Lưu", use_container_width=True, type="primary")
+                        
+                        if submitted:
+                            conn = sqlite3.connect('data.db')
+                            c = conn.cursor()
+                            c.execute('''
+                                UPDATE danh_muc_ten_giong 
+                                SET ma_giong = ? 
+                                WHERE ten_giong = ?
+                            ''', (ma_giong_moi.strip() if ma_giong_moi.strip() else None, ten_giong_chon))
+                            conn.commit()
+                            conn.close()
+                            
+                            if ma_giong_moi.strip():
+                                st.success(f"✅ Đã cập nhật mã '{ma_giong_moi.strip()}' cho '{ten_giong_chon}'")
+                            else:
+                                st.success(f"✅ Đã xóa mã của '{ten_giong_chon}'")
+                            st.rerun()
+            
+            st.markdown("---")
+            st.markdown("#### 🗑️ Xóa mã")
+            if len(df_ma_giong) > 0:
+                with st.form("form_xoa_ma_giong", clear_on_submit=True):
+                    xoa_options = [f"{row['Tên giống']} ({row['Mã giống']})" for _, row in df_ma_giong.iterrows()]
+                    ma_giong_xoa = st.selectbox("Chọn mã cần xóa", options=xoa_options)
+                    submitted = st.form_submit_button("🗑️ Xóa mã", use_container_width=True)
+                    
+                    if submitted:
+                        ten_giong_xoa = ma_giong_xoa.split(" (")[0]
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        c.execute('UPDATE danh_muc_ten_giong SET ma_giong = NULL WHERE ten_giong = ?', (ten_giong_xoa,))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"✅ Đã xóa mã của: {ten_giong_xoa}")
+                        st.rerun()
+        
+        # Tab Chu kỳ
+        with tab3:
             st.subheader("🔄 Quản lý Chu kỳ")
             
             danh_sach_chu_ky = get_danh_sach_chu_ky()
@@ -5749,7 +5817,7 @@ else:
                         st.rerun()
         
         # Tab Mã tình trạng - ĐƠN GIẢN HÓA TRIỆT ĐỂ
-        with tab3:
+        with tab4:
             st.subheader("🔢 Quản lý Mã tình trạng")
             st.caption("Chỉ quản lý mã số 3 chữ số (VD: 101, 201, 301, 305, 209...)")
             
@@ -5813,7 +5881,7 @@ else:
                         st.rerun()
         
         # Tab Môi trường
-        with tab4:
+        with tab5:
             st.subheader("🧪 Quản lý Môi trường")
             
             # Lấy danh sách môi trường với mã số
@@ -6054,8 +6122,8 @@ else:
                 else:
                     st.info("ℹ️ Không có môi trường nào để xóa.")
         
-        # TAB 5: QUẢN LÝ GIÀN/KỆ PHÒNG SÁNG
-        with tab5:
+        # TAB 6: QUẢN LÝ GIÀN/KỆ PHÒNG SÁNG
+        with tab6:
             st.subheader("📦 Quản lý Giàn/Kệ Phòng Sáng")
             
             danh_sach_gian_ke = get_danh_sach_gian_ke()
@@ -6150,8 +6218,8 @@ else:
                 - ✅ Quản lý kiểm kê hiệu quả
                 """)
         
-        # TAB 6: QUẢN LÝ VỊ TRÍ KHO MÔI TRƯỜNG
-        with tab6:
+        # TAB 7: QUẢN LÝ VỊ TRÍ KHO MÔI TRƯỜNG
+        with tab7:
             st.subheader("🏪 Quản lý Vị trí Kho Môi trường")
             
             danh_sach_vi_tri_kho = get_danh_sach_vi_tri_kho()
