@@ -2436,59 +2436,8 @@ else:
                     gio_bat_dau = datetime.now().time()
                     gio_ket_thuc = datetime.now().time()
                 
-                st.markdown("---")
-                st.markdown("#### 🔬 Nguồn gốc Mô Mẹ")
-                
-                # Lấy danh sách lô mô soi khả dụng cho giống này
-                danh_sach_lo_mo_soi = get_danh_sach_mo_soi_kha_dung(ten_giong)
-                
-                if len(danh_sach_lo_mo_soi) > 0:
-                    # Tạo options cho dropdown
-                    lo_options = {}
-                    for lo in danh_sach_lo_mo_soi:
-                        label = f"{lo['ma_lo_mo_soi']} | {lo['chu_ky_truoc']} | Còn: {lo['so_cum_con_lai']} cụm ({lo['so_cum_con_lai'] // lo['so_cum_moi_tui']} túi x {lo['so_cum_moi_tui']} cụm)"
-                        lo_options[label] = lo['ma_lo_mo_soi']
-                    
-                    # Hiển thị dropdown chọn lô
-                    lo_selected_label = st.selectbox(
-                        "Chọn lô Mô Soi *",
-                        options=list(lo_options.keys()),
-                        help="Chọn lô mô soi để lấy mô mẹ. Hệ thống sẽ tự động khấu trừ."
-                    )
-                    ma_lo_mo_soi = lo_options[lo_selected_label]
-                    
-                    # Lấy thông tin lô đã chọn
-                    lo_info = [lo for lo in danh_sach_lo_mo_soi if lo['ma_lo_mo_soi'] == ma_lo_mo_soi][0]
-                    
-                    # Hiển thị thông tin lô
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("📦 Mã lô", lo_info['ma_lo_mo_soi'])
-                    with col2:
-                        st.metric("🔄 Chu kỳ trước", lo_info['chu_ky_truoc'])
-                    with col3:
-                        st.metric("✅ Còn lại", f"{lo_info['so_cum_con_lai']} cụm")
-                    with col4:
-                        so_tui_toi_da = lo_info['so_cum_con_lai'] // lo_info['so_cum_moi_tui']
-                        st.metric("📊 Tối đa", f"~{so_tui_toi_da} túi")
-                    
-                    st.success(f"✅ Đã chọn lô **{ma_lo_mo_soi}** - Hệ thống sẽ tự động khấu trừ khi lưu nhật ký")
-                else:
-                    st.error(f"""
-                    🚫 **KHÔNG CÓ MÔ SOI CHO GIỐNG: {ten_giong}**
-                    
-                    **Nguyên nhân:**
-                    - Chưa nhập kết quả kiểm tra Mô Soi từ phòng sáng
-                    - Mô Soi của giống này đã hết
-                    
-                    **Hành động:**
-                    1. Vào trang "Quản lý Mô Soi"
-                    2. Nhập kết quả kiểm tra từ chu kỳ trước
-                    3. Quay lại nhập nhật ký cấy
-                    
-                    ⚠️ **KHÔNG THỂ NHẬP NHẬT KÝ** nếu không có Mô Soi!
-                    """)
-                    ma_lo_mo_soi = None
+                # Bỏ phần Nguồn gốc Mô Mẹ - Không bắt buộc liên kết với Mô Soi
+                ma_lo_mo_soi = None
                 
                 st.markdown("---")
                 st.markdown("#### 👨‍🌾 Thông tin túi mẹ")
@@ -4469,14 +4418,176 @@ else:
             ''', conn)
             conn.close()
             
-            if len(df_phong_sang) == 0:
+            # Thêm tùy chọn nhập bằng tay
+            st.markdown("#### 🎯 Phương thức nhập liệu")
+            phuong_thuc = st.radio(
+                "Chọn cách nhập Mô Soi:",
+                ["🔗 Liên kết từ Phòng Sáng", "✍️ Nhập bằng tay (không có lô sẵn)"],
+                horizontal=True,
+                help="Chọn 'Nhập bằng tay' nếu chưa có dữ liệu từ Phòng Sáng"
+            )
+            
+            if phuong_thuc == "✍️ Nhập bằng tay (không có lô sẵn)":
+                # FORM NHẬP BẰNG TAY HOÀN TOÀN
+                st.info("📝 **Nhập thủ công** - Dùng khi chưa có dữ liệu trong Phòng Sáng")
+                
+                with st.form("form_nhap_mo_soi_thu_cong", clear_on_submit=True):
+                    st.markdown("#### 🌱 Thông tin giống cây")
+                    
+                    danh_sach_ten_giong = get_danh_sach_ten_giong()
+                    danh_sach_chu_ky = get_danh_sach_chu_ky()
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        ten_giong_manual = st.selectbox("Tên giống *", options=danh_sach_ten_giong)
+                    with col2:
+                        chu_ky_manual = st.selectbox("Chu kỳ *", options=danh_sach_chu_ky)
+                    
+                    st.markdown("---")
+                    st.markdown("#### 📅 Thông tin thời gian")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        ngay_cay_manual = st.date_input("Ngày cấy *", value=date.today())
+                    with col2:
+                        tuan_manual = st.selectbox("Tuần cấy *", options=list(range(1, 53)), index=0)
+                    with col3:
+                        thang_manual = st.selectbox("Tháng cấy *", options=list(range(1, 13)), index=0)
+                    
+                    ngay_soi_manual = st.date_input("Ngày kiểm tra (soi) *", value=date.today())
+                    
+                    st.markdown("---")
+                    st.markdown("#### 🔢 Số lượng và kết quả")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        so_luong_ban_dau_manual = st.number_input("Số túi ban đầu *", min_value=1, value=100, step=1)
+                    with col2:
+                        so_tui_nhiem_manual = st.number_input(
+                            "Số túi nhiễm *",
+                            min_value=0,
+                            max_value=so_luong_ban_dau_manual,
+                            value=0,
+                            step=1
+                        )
+                    
+                    so_cum_moi_tui_manual = st.number_input(
+                        "Số cụm mỗi túi sạch *",
+                        min_value=1,
+                        value=5,
+                        step=1
+                    )
+                    
+                    # Tính toán
+                    so_tui_sach_manual = so_luong_ban_dau_manual - so_tui_nhiem_manual
+                    tong_cum_sach_manual = so_tui_sach_manual * so_cum_moi_tui_manual
+                    
+                    st.markdown("---")
+                    st.markdown("#### 📊 Kết quả tự động tính")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Túi sạch", f"{so_tui_sach_manual} túi")
+                    with col2:
+                        st.metric("Tổng cụm sạch", f"{tong_cum_sach_manual} cụm")
+                    with col3:
+                        ty_le_sach_manual = (so_tui_sach_manual / so_luong_ban_dau_manual * 100) if so_luong_ban_dau_manual > 0 else 0
+                        st.metric("Tỷ lệ sạch", f"{ty_le_sach_manual:.1f}%")
+                    with col4:
+                        ty_le_nhiem_manual = (so_tui_nhiem_manual / so_luong_ban_dau_manual * 100) if so_luong_ban_dau_manual > 0 else 0
+                        st.metric("Tỷ lệ nhiễm", f"{ty_le_nhiem_manual:.1f}%")
+                    
+                    st.markdown("---")
+                    st.markdown("#### 👤 Người thực hiện")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        nguoi_soi_manual = st.text_input("Tên nhân viên soi *", value=user_info['ten_nhan_vien'])
+                    with col2:
+                        ma_nv_soi_manual = st.text_input("Mã nhân viên *", value=user_info['ma_nhan_vien'])
+                    
+                    ghi_chu_manual = st.text_area("Ghi chú", placeholder="Ghi chú về kết quả kiểm tra...")
+                    
+                    st.markdown("---")
+                    submitted_manual = st.form_submit_button("💾 Lưu Mô Soi (Nhập tay)", use_container_width=True, type="primary")
+                    
+                    if submitted_manual:
+                        # Tạo mã lô mô soi tự động
+                        ma_lo_mo_soi_new = tao_ma_lo_mo_soi()
+                        
+                        # Lưu vào database
+                        conn = sqlite3.connect('data.db')
+                        c = conn.cursor()
+                        
+                        c.execute('''
+                            INSERT INTO mo_soi (
+                                ma_lo_mo_soi,
+                                ten_giong,
+                                chu_ky_truoc,
+                                ngay_cay,
+                                tuan_cay,
+                                thang_cay,
+                                ngay_soi,
+                                nhan_vien_cay,
+                                ma_nhan_vien_cay,
+                                so_luong_ban_dau,
+                                so_tui_nhiem,
+                                so_tui_sach,
+                                so_cum_moi_tui,
+                                tong_so_cum_sach,
+                                so_cum_con_lai,
+                                trang_thai,
+                                nguoi_soi,
+                                ma_nv_soi,
+                                ghi_chu,
+                                ngay_tao,
+                                id_nhat_ky_cay
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            ma_lo_mo_soi_new,
+                            ten_giong_manual,
+                            chu_ky_manual,
+                            ngay_cay_manual.strftime("%Y-%m-%d"),
+                            tuan_manual,
+                            thang_manual,
+                            ngay_soi_manual.strftime("%Y-%m-%d"),
+                            nguoi_soi_manual,
+                            ma_nv_soi_manual,
+                            so_luong_ban_dau_manual,
+                            so_tui_nhiem_manual,
+                            so_tui_sach_manual,
+                            so_cum_moi_tui_manual,
+                            tong_cum_sach_manual,
+                            tong_cum_sach_manual,  # Ban đầu = tổng cụm sạch
+                            "Chưa sử dụng",
+                            nguoi_soi_manual,
+                            ma_nv_soi_manual,
+                            ghi_chu_manual,
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            None  # Không liên kết với Phòng Sáng
+                        ))
+                        
+                        conn.commit()
+                        conn.close()
+                        
+                        st.success(f"""
+                        ✅ **ĐÃ LƯU MÔ SOI (NHẬP TAY)**
+                        
+                        📦 **Mã lô:** {ma_lo_mo_soi_new}
+                        🌱 **Giống:** {ten_giong_manual} - {chu_ky_manual}
+                        ✅ **Túi sạch:** {so_tui_sach_manual} túi ({tong_cum_sach_manual} cụm)
+                        ⚠️ **Túi nhiễm:** {so_tui_nhiem_manual} túi ({ty_le_nhiem_manual:.1f}%)
+                        
+                        🎯 **Mô Soi này đã sẵn sàng để cấy!**
+                        """)
+                        st.balloons()
+                        
+            elif len(df_phong_sang) == 0:
                 st.warning("""
                 ⚠️ **Không có lô nào từ Phòng Sáng để kiểm tra.**
                 
-                Vui lòng:
-                1. Nhập Nhật ký cấy trước
-                2. Đợi lô cấy chuyển sang Phòng Sáng
-                3. Quay lại đây để nhập kết quả kiểm tra Mô Soi
+                **Hành động:**
+                - Chuyển sang chế độ **"✍️ Nhập bằng tay"** phía trên
+                - Hoặc nhập Nhật ký cấy trước để có dữ liệu từ Phòng Sáng
                 """)
             else:
                 # Tạo dictionary để map
