@@ -317,6 +317,21 @@ def migrate_database():
                 conn.commit()
             except:
                 pass
+    
+    # Kiểm tra và migrate bảng danh_muc_ten_giong
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='danh_muc_ten_giong'")
+    giong_table_exists = c.fetchone() is not None
+    
+    if giong_table_exists:
+        columns_giong = check_table_structure(conn, 'danh_muc_ten_giong')
+        
+        # Thêm cột ma_giong nếu chưa có
+        if 'ma_giong' not in columns_giong:
+            try:
+                c.execute("ALTER TABLE danh_muc_ten_giong ADD COLUMN ma_giong TEXT")
+                conn.commit()
+            except:
+                pass
         
         # Nếu không có cột ngay_cay hoặc ma_so_moi_truong_me, đây là cấu trúc cũ
         if 'ngay_cay' not in columns or 'ma_so_moi_truong_me' not in columns:
@@ -454,6 +469,7 @@ def init_database():
         CREATE TABLE IF NOT EXISTS danh_muc_ten_giong (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ten_giong TEXT UNIQUE NOT NULL,
+            ma_giong TEXT,
             ngay_tao TEXT NOT NULL
         )
     ''')
@@ -2197,7 +2213,18 @@ else:
         st.markdown("---")
         
         # Lấy danh sách từ database
-        danh_sach_ten_giong = get_danh_sach_ten_giong()
+        conn = sqlite3.connect('data.db')
+        df_giong = pd.read_sql_query('SELECT ten_giong, ma_giong FROM danh_muc_ten_giong ORDER BY ten_giong', conn)
+        conn.close()
+        
+        # Tạo dict để map tên giống -> mã giống
+        dict_ma_giong = {}
+        danh_sach_ten_giong = []
+        for _, row in df_giong.iterrows():
+            ten = row['ten_giong']
+            ma = row['ma_giong']
+            danh_sach_ten_giong.append(ten)
+            dict_ma_giong[ten] = ma if pd.notna(ma) else None
         danh_sach_chu_ky = get_danh_sach_chu_ky()
         danh_sach_moi_truong = get_danh_sach_moi_truong()  # Dict: mã số -> tên
         
@@ -2240,12 +2267,26 @@ else:
                 
                 st.markdown("---")
                 st.markdown("#### 🌿 Thông tin giống")
-                ten_giong = st.selectbox(
+                
+                # Dropdown với format "Tên giống (Mã)"
+                giong_display_options = []
+                for ten in danh_sach_ten_giong:
+                    ma = dict_ma_giong.get(ten)
+                    if ma:
+                        giong_display_options.append(f"{ten} ({ma})")
+                    else:
+                        giong_display_options.append(ten)
+                
+                ten_giong_selected = st.selectbox(
                     "Tên giống *",
-                    options=danh_sach_ten_giong,
+                    options=giong_display_options,
                     index=0,
                     help="Chọn loại giống cây"
                 )
+                
+                # Lấy tên giống thực tế (bỏ mã nếu có)
+                ten_giong = ten_giong_selected.split(" (")[0] if " (" in ten_giong_selected else ten_giong_selected
+                ma_giong = dict_ma_giong.get(ten_giong)
                 
                 chu_ky = st.selectbox(
                     "Chu kỳ *",
@@ -5572,51 +5613,82 @@ else:
         with tab1:
             st.subheader("🌿 Quản lý Tên giống")
             
-            danh_sach_ten_giong = get_danh_sach_ten_giong()
+            # Lấy danh sách với mã giống
+            conn = sqlite3.connect('data.db')
+            df_giong = pd.read_sql_query('''
+                SELECT ten_giong AS "Tên giống", ma_giong AS "Mã giống"
+                FROM danh_muc_ten_giong 
+                ORDER BY ten_giong
+            ''', conn)
+            conn.close()
             
             col1, col2 = st.columns([2, 1])
             
             with col1:
                 st.markdown("#### 📋 Danh sách hiện tại")
-                if len(danh_sach_ten_giong) > 0:
-                    df_tg = pd.DataFrame({'Tên giống': danh_sach_ten_giong})
-                    st.dataframe(df_tg, use_container_width=True, hide_index=True)
+                if len(df_giong) > 0:
+                    st.dataframe(df_giong, use_container_width=True, hide_index=True)
                 else:
                     st.warning("⚠️ Chưa có tên giống nào.")
             
             with col2:
                 st.markdown("#### ➕ Thêm mới")
                 with st.form("form_them_ten_giong", clear_on_submit=True):
-                    ten_giong_moi = st.text_input("Tên giống", key="them_tg")
-                    submitted = st.form_submit_button("➕ Thêm", use_container_width=True)
+                    ten_giong_moi = st.text_input(
+                        "Tên giống *", 
+                        placeholder="VD: Đồng tiền",
+                        key="them_tg"
+                    )
+                    ma_giong_moi = st.text_input(
+                        "Mã giống",
+                        placeholder="VD: T1126",
+                        help="Mã định danh giống (có thể để trống)",
+                        key="them_mg"
+                    )
+                    submitted = st.form_submit_button("➕ Thêm", use_container_width=True, type="primary")
                     
                     if submitted and ten_giong_moi.strip():
                         conn = sqlite3.connect('data.db')
                         c = conn.cursor()
                         try:
                             c.execute('''
-                                INSERT INTO danh_muc_ten_giong (ten_giong, ngay_tao)
-                                VALUES (?, ?)
-                            ''', (ten_giong_moi.strip(), datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                                INSERT INTO danh_muc_ten_giong (ten_giong, ma_giong, ngay_tao)
+                                VALUES (?, ?, ?)
+                            ''', (
+                                ten_giong_moi.strip(), 
+                                ma_giong_moi.strip() if ma_giong_moi.strip() else None,
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            ))
                             conn.commit()
                             conn.close()
-                            st.success(f"✅ Đã thêm: {ten_giong_moi.strip()}")
+                            st.success(f"✅ Đã thêm: {ten_giong_moi.strip()}" + (f" (Mã: {ma_giong_moi.strip()})" if ma_giong_moi.strip() else ""))
                             st.rerun()
                         except sqlite3.IntegrityError:
                             conn.close()
-                            st.error("❌ Đã tồn tại!")
+                            st.error("❌ Tên giống đã tồn tại!")
             
             st.markdown("---")
             st.markdown("#### 🗑️ Xóa")
-            if len(danh_sach_ten_giong) > 0:
+            if len(df_giong) > 0:
                 with st.form("form_xoa_ten_giong", clear_on_submit=True):
-                    ten_giong_xoa = st.selectbox("Chọn tên giống cần xóa", options=danh_sach_ten_giong, key="xoa_tg")
+                    # Tạo options với format "Tên giống (Mã)"
+                    giong_options = []
+                    for _, row in df_giong.iterrows():
+                        if pd.notna(row['Mã giống']) and row['Mã giống']:
+                            giong_options.append(f"{row['Tên giống']} ({row['Mã giống']})")
+                        else:
+                            giong_options.append(row['Tên giống'])
+                    
+                    ten_giong_xoa = st.selectbox("Chọn giống cần xóa", options=giong_options, key="xoa_tg")
                     submitted = st.form_submit_button("🗑️ Xóa", use_container_width=True)
                     
                     if submitted:
+                        # Lấy tên giống từ chuỗi
+                        ten_giong_xoa_clean = ten_giong_xoa.split(" (")[0] if " (" in ten_giong_xoa else ten_giong_xoa
+                        
                         conn = sqlite3.connect('data.db')
                         c = conn.cursor()
-                        c.execute('DELETE FROM danh_muc_ten_giong WHERE ten_giong = ?', (ten_giong_xoa,))
+                        c.execute('DELETE FROM danh_muc_ten_giong WHERE ten_giong = ?', (ten_giong_xoa_clean,))
                         conn.commit()
                         conn.close()
                         st.success(f"✅ Đã xóa: {ten_giong_xoa}")
