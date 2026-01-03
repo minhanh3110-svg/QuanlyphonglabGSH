@@ -333,24 +333,26 @@ def migrate_database():
             except:
                 pass
         
+        # ⚠️ ĐOẠN CODE NÀY ĐÃ BỊ VÔ HIỆU HÓA ĐỂ BẢO VỆ DỮ LIỆU
         # Nếu không có cột ngay_cay hoặc ma_so_moi_truong_me, đây là cấu trúc cũ
-        if 'ngay_cay' not in columns or 'ma_so_moi_truong_me' not in columns:
-            # Backup dữ liệu cũ nếu có
-            try:
-                c.execute("SELECT COUNT(*) FROM nhat_ky_cay")
-                count = c.fetchone()[0]
-                if count > 0:
-                    c.execute('''
-                        CREATE TABLE IF NOT EXISTS nhat_ky_cay_backup_old AS 
-                        SELECT * FROM nhat_ky_cay
-                    ''')
-                    conn.commit()
-            except:
-                pass
-            
-            # Xóa bảng cũ và tạo lại với cấu trúc mới
-            c.execute("DROP TABLE IF EXISTS nhat_ky_cay")
-            conn.commit()
+        # KHÔNG BAO GIỜ XÓA BẢNG TỰ ĐỘNG - PHẢI BACKUP TAY TRƯỚC
+        # if 'ngay_cay' not in columns or 'ma_so_moi_truong_me' not in columns:
+        #     # Backup dữ liệu cũ nếu có
+        #     try:
+        #         c.execute("SELECT COUNT(*) FROM nhat_ky_cay")
+        #         count = c.fetchone()[0]
+        #         if count > 0:
+        #             c.execute('''
+        #                 CREATE TABLE IF NOT EXISTS nhat_ky_cay_backup_old AS 
+        #                 SELECT * FROM nhat_ky_cay
+        #             ''')
+        #             conn.commit()
+        #     except:
+        #         pass
+        #     
+        #     # Xóa bảng cũ và tạo lại với cấu trúc mới
+        #     c.execute("DROP TABLE IF EXISTS nhat_ky_cay")
+        #     conn.commit()
     
     # Kiểm tra và migrate bảng danh_muc_moi_truong
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='danh_muc_moi_truong'")
@@ -359,24 +361,26 @@ def migrate_database():
     if mt_table_exists:
         columns = check_table_structure(conn, 'danh_muc_moi_truong')
         
+        # ⚠️ ĐOẠN CODE NÀY ĐÃ BỊ VÔ HIỆU HÓA ĐỂ BẢO VỆ DỮ LIỆU
         # Nếu không có cột ma_so, đây là cấu trúc cũ
-        if 'ma_so' not in columns:
-            # Backup dữ liệu cũ
-            try:
-                c.execute("SELECT COUNT(*) FROM danh_muc_moi_truong")
-                count = c.fetchone()[0]
-                if count > 0:
-                    c.execute('''
-                        CREATE TABLE IF NOT EXISTS danh_muc_moi_truong_backup_old AS 
-                        SELECT * FROM danh_muc_moi_truong
-                    ''')
-                    conn.commit()
-            except:
-                pass
-            
-            # Xóa bảng cũ và tạo lại với cấu trúc mới
-            c.execute("DROP TABLE IF EXISTS danh_muc_moi_truong")
-            conn.commit()
+        # KHÔNG BAO GIỜ XÓA BẢNG TỰ ĐỘNG - PHẢI BACKUP TAY TRƯỚC
+        # if 'ma_so' not in columns:
+        #     # Backup dữ liệu cũ
+        #     try:
+        #         c.execute("SELECT COUNT(*) FROM danh_muc_moi_truong")
+        #         count = c.fetchone()[0]
+        #         if count > 0:
+        #             c.execute('''
+        #                 CREATE TABLE IF NOT EXISTS danh_muc_moi_truong_backup_old AS 
+        #                 SELECT * FROM danh_muc_moi_truong
+        #             ''')
+        #             conn.commit()
+        #     except:
+        #         pass
+        #     
+        #     # Xóa bảng cũ và tạo lại với cấu trúc mới
+        #     c.execute("DROP TABLE IF EXISTS danh_muc_moi_truong")
+        #     conn.commit()
     
     # Kiểm tra và tạo bảng phòng sáng nếu chưa có
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quan_ly_phong_sang'")
