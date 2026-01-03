@@ -2293,42 +2293,19 @@ else:
                             st.warning(f"⚠️ Chưa có mã cho '{tinh_trang}'!")
                             ma_tinh_trang = 301
                         else:
-                            # Tạo display options: "301 - Sạch chuẩn"
-                            ma_display = [f"{m['ma_so']} - {m['ten_mo_ta']}" for m in ma_options]
+                            # CHỈ HIỂN THỊ SELECTBOX MÃ SỐ - Không có cảnh báo
+                            ma_display = [str(m['ma_so']) for m in ma_options]
                             
                             # Chọn mã
                             ma_selected = st.selectbox(
-                                f"Mã tình trạng ({chu_ky}) *",
+                                "Mã tình trạng *",
                                 options=ma_display,
                                 index=0,
-                                help=f"Chọn mã tình trạng cho chu kỳ {chu_ky}"
+                                help="Chọn mã tình trạng"
                             )
                             
-                            # Lấy mã số từ chuỗi
-                            ma_tinh_trang = int(ma_selected.split(" - ")[0])
-                
-                # Hiển thị cảnh báo nếu chọn Khuẩn
-                if tinh_trang == "Khuẩn":
-                    if ma_tinh_trang % 10 == 9:  # Mã cuối 9: Hủy
-                        st.error(f"""
-🔴 **HỦY BỎ**
-
-Lô này có mã cuối **9** - Khuẩn nặng (Hủy bỏ)
-- Sẽ bị **TRỪ THẲNG** khỏi kho Phòng Sáng
-- Tính vào tỷ lệ **THẤT THOÁT**
-- **KHÔNG** được dùng làm Mô Mẹ
-                        """)
-                    else:  # Mã 05 hoặc 07: Khuẩn nhẹ/vừa
-                        st.warning(f"""
-⚠️ **CẢNH BÁO KHUẨN**
-
-Lô này có tình trạng **Khuẩn** (Mã {ma_tinh_trang})
-- Vẫn lưu trong Phòng Sáng
-- Có thể sử dụng làm Mô Mẹ nhưng **cần theo dõi**
-- Ưu tiên xử lý trước khi lây lan
-                        """)
-                else:  # Sạch
-                    st.success(f"✅ Lô sạch (Mã {ma_tinh_trang}) - Chất lượng tốt")
+                            # Lấy mã số
+                            ma_tinh_trang = int(ma_selected)
                 
                 box_cay = st.number_input(
                     "Box cấy *",
